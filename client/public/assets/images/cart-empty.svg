@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <title>Your Cart is Empty</title>
+  <desc>CLIICK-G editable vector empty cart illustration using a cohesive green palette.</desc>
+
+  <!-- Background -->
+  <rect width="1200" height="900" rx="32" fill="#F5FAF7"/>
+
+  <!-- Soft illustration panel -->
+  <circle cx="600" cy="385" r="285" fill="#E5F1EB"/>
+  <circle cx="600" cy="385" r="225" fill="#EEF7F2"/>
+
+  <!-- Decorative dots -->
+  <g fill="#B8D5C6">
+    <circle cx="265" cy="270" r="8"/>
+    <circle cx="925" cy="255" r="7"/>
+    <circle cx="225" cy="505" r="6"/>
+    <circle cx="980" cy="510" r="8"/>
+  </g>
+
+  <!-- Decorative pluses -->
+  <g stroke="#75A990" stroke-width="6" stroke-linecap="round">
+    <path d="M300 355h30M315 340v30"/>
+    <path d="M885 350h30M900 335v30"/>
+  </g>
+
+  <!-- Ground -->
+  <ellipse cx="600" cy="625" rx="305" ry="28" fill="#CFE3D8"/>
+
+  <!-- Plant left -->
+  <g stroke="#023C23" stroke-width="7" stroke-linecap="round">
+    <path d="M355 625V525"/>
+    <path d="M355 575C330 550 315 535 295 525"/>
+    <path d="M355 555C380 535 395 520 410 500"/>
+  </g>
+  <g fill="#9FC5B2">
+    <ellipse cx="315" cy="535" rx="19" ry="42" transform="rotate(-42 315 535)"/>
+    <ellipse cx="393" cy="515" rx="19" ry="44" transform="rotate(42 393 515)"/>
+  </g>
+
+  <!-- Plant right -->
+  <g stroke="#023C23" stroke-width="7" stroke-linecap="round">
+    <path d="M845 625V525"/>
+    <path d="M845 575C870 550 885 535 905 525"/>
+    <path d="M845 555C820 535 805 520 790 500"/>
+  </g>
+  <g fill="#9FC5B2">
+    <ellipse cx="885" cy="535" rx="19" ry="42" transform="rotate(42 885 535)"/>
+    <ellipse cx="807" cy="515" rx="19" ry="44" transform="rotate(-42 807 515)"/>
+  </g>
+
+  <!-- Cart shadow -->
+  <ellipse cx="600" cy="615" rx="245" ry="17" fill="#B9D3C5"/>
+
+  <!-- Shopping cart -->
+  <g stroke="#023C23" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Handle and frame -->
+    <path d="M395 325H455C475 325 488 338 492 357L535 548C540 571 559 585 583 585H795"
+          fill="none" stroke-width="20"/>
+    <path d="M390 325H350" fill="none" stroke-width="24"/>
+
+    <!-- Basket -->
+    <path d="M472 375H785C803 375 816 391 812 409L783 535C780 550 767 560 752 560H515"
+          fill="#F8FCFA" stroke-width="18"/>
+
+    <!-- Basket grid -->
+    <g stroke="#78A990" stroke-width="6">
+      <path d="M490 420H800"/>
+      <path d="M500 468H790"/>
+      <path d="M510 515H780"/>
+      <path d="M545 378L565 558"/>
+      <path d="M610 377L620 558"/>
+      <path d="M675 377L675 558"/>
+      <path d="M740 377L730 558"/>
+    </g>
+
+    <!-- Empty tag -->
+    <rect x="625" y="430" width="90" height="62" rx="14" fill="#DDEDE5" stroke="none"/>
+    <path d="M652 456h36M652 472h24" stroke="#75A990" stroke-width="6"/>
+
+    <!-- Wheels -->
+    <circle cx="570" cy="620" r="32" fill="#023C23" stroke="none"/>
+    <circle cx="570" cy="620" r="10" fill="#EAF4EF" stroke="none"/>
+    <circle cx="775" cy="620" r="32" fill="#023C23" stroke="none"/>
+    <circle cx="775" cy="620" r="10" fill="#EAF4EF" stroke="none"/>
+  </g>
+
+  <!-- Floating shopping bag badge -->
+  <g>
+    <circle cx="600" cy="245" r="72" fill="#023C23"/>
+    <path d="M565 235h70l7 55h-84z" fill="none" stroke="#F5FAF7" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M582 236v-17c0-11 8-20 18-20s18 9 18 20v17"
+          fill="none" stroke="#F5FAF7" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Badge rays -->
+  <g stroke="#023C23" stroke-width="7" stroke-linecap="round">
+    <path d="M505 235l-28-12"/>
+    <path d="M695 235l28-12"/>
+    <path d="M510 280l-25 15"/>
+    <path d="M690 280l25 15"/>
+  </g>
+
+  <!-- Main message -->
+  <text x="600" y="730"
+        text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="54"
+        font-weight="700"
+        letter-spacing="-1"
+        fill="#023C23">Your Cart is Empty.</text>
+
+  <!-- Small accent -->
+  <rect x="540" y="765" width="95" height="8" rx="4" fill="#023C23"/>
+  <circle cx="652" cy="769" r="6" fill="#023C23"/>
+</svg>

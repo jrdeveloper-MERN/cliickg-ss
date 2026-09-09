@@ -1,0 +1,991 @@
+// Target  PostgreSQL Schema 
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. User Account Entity
+model User {
+  id              String       @id
+  username        String       @unique
+  password        String?
+  name            String       @default("Customer")
+  email           String?      @unique
+  countryCode     String       @default("+91")
+  mobileNumber    String?
+  fullPhoneNumber String?      @unique
+  role            String       @default("customer")
+  accountStatus   String       @default("ACTIVE")
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  deletedBy       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  customer        Customer?
+  addresses       Address[]
+  cart            Cart?
+  orders          Order[]
+  returnRequests  ReturnRequest[]
+  auditLogs       AuditLog[]
+  promoUsages     PromoUsage[]
+  adminSessions   AdminSession[]
+
+  @@map("users")
+}
+
+// 2. Customer Profile Entity
+model Customer {
+  id              String       @id
+  customerId      String       @unique
+  userId          String?      @unique
+  user            User?        @relation(fields: [userId], references: [id])
+  name            String
+  email           String
+  phone           String
+  countryCode     String       @default("+91")
+  mobileNumber    String       @default("")
+  fullPhoneNumber String?      @unique
+  type            String       @default("Customer")
+  address         String       @default("")
+  address1        String       @default("")
+  address2        String       @default("")
+  area            String       @default("")
+  landmark        String       @default("")
+  city            String       @default("")
+  state           String       @default("TAMIL NADU")
+  pincode         String       @default("")
+  gender          String       @default("Male")
+  dob             String       @default("")
+  status          String       @default("Active")
+  accountStatus   String       @default("ACTIVE")
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  deletedBy       String?
+  joinedDate      DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@map("customers")
+}
+
+// 3. User Saved Address Entity
+model Address {
+  id           String    @id
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String
+  email        String    @default("")
+  addressLine1 String
+  addressLine2 String    @default("")
+  area         String    @default("")
+  city         String
+  state        String
+  pincode      String
+  landmark     String    @default("")
+  isDefault    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("addresses")
+}
+
+// 4. Main Category Entity
+model MainCategory {
+  id            String        @id
+  name          String
+  image         String        @default("")
+  status        String        @default("Active")
+  isDeleted     Boolean       @default(false)
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  categories    Category[]
+  subCategories SubCategory[]
+  products      Product[]
+
+  @@index([isDeleted])
+  @@map("maincategories")
+}
+
+// 5. Category Entity
+model Category {
+  id             String        @id
+  mainCategoryId String
+  mainCategory   MainCategory  @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
+  name           String
+  image          String        @default("")
+  status         String        @default("Active")
+  isDeleted      Boolean       @default(false)
+  deletedAt      DateTime?
+  deletedBy      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  subCategories  SubCategory[]
+  products       Product[]
+
+  @@index([isDeleted])
+  @@map("categories")
+}
+
+// 6. SubCategory Entity (Single PostgreSQL Table for MongoDB "subcategories" Collection)
+model SubCategory {
+  id             String       @id
+  name           String
+  mainCategoryId String
+  mainCategory   MainCategory @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  image          String       @default("")
+  status         String       @default("Active")
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  deletedBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  products       Product[]
+
+  @@index([isDeleted])
+  @@map("subcategories")
+}
+
+// 7. Attribute Caption Entity
+model AttributeCaption {
+  id        String   @id
+  caption   String
+  image     String   @default("")
+  status    String   @default("Active")
+  values    Json?
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isDeleted])
+  @@map("attributecaptions")
+}
+
+// 8. Attribute Mapping Entity
+model AttributeMapping {
+  id         String   @id
+  categoryId String
+  attributes Json?
+  isDeleted  Boolean  @default(false)
+  deletedAt  DateTime?
+  deletedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isDeleted])
+  @@map("attributemappings")
+}
+
+// 9. Product Master Entity
+model Product {
+  id                String          @id
+  name              String
+  offerText         String          @default("")
+  gender            String          @default("Unisex")
+  mainCategoryId    String
+  mainCategory      MainCategory    @relation(fields: [mainCategoryId], references: [id])
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id])
+  subCategoryId     String
+  subCategory       SubCategory     @relation(fields: [subCategoryId], references: [id])
+  hsnCode           String          @default("")
+  productImage      String          @default("")
+  secondaryImage    String          @default("")
+  shortDescription  String          @default("")
+  description       String          @default("")
+  certificates      String[]
+  images            String[]
+  price             Decimal         @default(0) @db.Decimal(12, 2)
+  stock             Int             @default(0)
+  attributes        Json?
+  status            String          @default("Active")
+  safetyCharacteristic String      @default("NORMAL")
+  isDeleted         Boolean         @default(false)
+  deletedAt         DateTime?
+  deletedBy         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  variants          ProductVariant[]
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+
+  @@index([isDeleted])
+  @@map("products")
+}
+
+// 10. Product Variant Child Table (Embedded productDetails Array Port)
+model ProductVariant {
+  id          String   @id
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku         String
+  skuCode     String   @default("")
+  mrp         Decimal  @default(0) @db.Decimal(12, 2)
+  offerPrice  Decimal  @default(0) @db.Decimal(12, 2)
+  gst         Decimal  @default(0) @db.Decimal(10, 2)
+  gstMode     String   @default("EXCLUSIVE")
+  taxMode     String   @default("CGST_SGST")
+  price       Decimal  @default(0) @db.Decimal(12, 2)
+  attributes  Json?
+  stock       Int      @default(0)
+  stockStatus String   @default("In Stock")
+  status      String   @default("Active")
+  images      String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("productvariants")
+}
+
+// 15. Shopping Cart Master Entity
+model Cart {
+  id        String     @id
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+// 16. Cart Item Child Entity
+model CartItem {
+  id                 String   @id
+  cartId             String
+  cart               Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id])
+  variantId          String?
+  quantity           Int      @default(1)
+  price              Decimal  @default(0) @db.Decimal(12, 2)
+  selectedAttributes Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("cartitems")
+}
+
+// 17. Order Master Entity
+model Order {
+  id                 String       @id
+  orderId            String       @unique
+  orderNo            String       @default("AIS2408")
+  userId             String?
+  user               User?        @relation(fields: [userId], references: [id])
+  customerName       String
+  customerType       String       @default("CUST")
+  mobile             String
+  email              String       @default("")
+  address            String?
+  billingAddress     Json?
+  shippingAddress    Json?
+  paymentMethod      String       @default("Online")
+  paymentType        String       @default("On")
+  cashfreePaymentId  String       @default("")
+  paymentGateway     String       @default("Razorpay")
+  gatewayOrderId     String       @default("")
+  gatewayPaymentId   String       @default("")
+  transactionId      String       @default("")
+  paymentSessionId   String       @default("")
+  paymentMode        String       @default("")
+  currency           String       @default("INR")
+  amountPaid         Decimal      @default(0) @db.Decimal(12, 2)
+  paidAt             DateTime?
+  webhookVerified    Boolean      @default(false)
+  failureReason      String       @default("")
+  paymentAttempts    Int          @default(0)
+  lastGatewayResponse Json?
+  paymentStatus      String       @default("Pending")
+  orderStatus        String       @default("Received")
+  refundStatus       String       @default("None")
+  invoiceStatus      String       @default("Pending")
+  invoiceNo          String       @default("")
+  invoiceGeneratedAt DateTime?
+  total              Decimal      @db.Decimal(12, 2)
+  subtotal           Decimal      @default(0) @db.Decimal(12, 2)
+  shippingFee        Decimal      @default(0) @db.Decimal(12, 2)
+  packagingFee       Decimal      @default(0) @db.Decimal(12, 2)
+  insuranceFee       Decimal      @default(0) @db.Decimal(12, 2)
+  gstTotal           Decimal      @default(0) @db.Decimal(12, 2)
+  promoCode          String       @default("")
+  promoDiscount      Decimal      @default(0) @db.Decimal(12, 2)
+  promotionSnapshot  Json?
+  shippingSnapshot   Json?
+  courierId          String?
+  courier            CourierMaster? @relation(fields: [courierId], references: [id])
+  returnReason       String?      @default("")
+  returnStatus       String?      @default("NONE")
+  returnCourier      String?      @default("")
+  returnTrackingNumber String?    @default("")
+  returnRequestedAt  DateTime?
+  isDeleted          Boolean      @default(false)
+  deletedAt          DateTime?
+  deletedBy          String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  items              OrderItem[]
+  paymentTimeline    OrderPaymentTimeline[]
+  statusHistory      OrderStatusHistory[]
+  shipmentTimeline   OrderShipmentTimeline[]
+  returnRequest      ReturnRequest?
+  promoUsages        PromoUsage[]
+
+  @@map("orders")
+}
+
+// 17b. Return Request Entity
+model ReturnRequest {
+  id           String   @id
+  orderId      String   @unique
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  reason       String
+  comments     String?  @default("")
+  status       String   @default("REQUESTED")
+  refundStatus String   @default("NONE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("returnrequests")
+}
+
+// 18. Order Item Child Entity
+model OrderItem {
+  id           String   @id
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  productName  String
+  productImage String   @default("")
+  variantId    String?
+  sku          String   @default("")
+  quantity     Int      @default(1)
+  unitPrice    Decimal  @default(0) @db.Decimal(12, 2)
+  totalPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  attributes   Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("orderitems")
+}
+
+// 19. Order Payment Timeline Entity
+model OrderPaymentTimeline {
+  id        String   @id
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  event     String
+  status    String
+  amount    Decimal  @default(0) @db.Decimal(12, 2)
+  gateway   String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@map("orderpaymenttimelines")
+}
+
+// 20. Order Status History Entity
+model OrderStatusHistory {
+  id        String   @id
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    String
+  notes     String   @default("")
+  updatedBy String   @default("System")
+  createdAt DateTime @default(now())
+
+  @@map("orderstatushistories")
+}
+
+// 21. Order Shipment Timeline Entity
+model OrderShipmentTimeline {
+  id        String   @id
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    String
+  location  String   @default("")
+  notes     String   @default("")
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@map("ordershipmenttimelines")
+}
+
+// 22. Courier Master Entity
+model CourierMaster {
+  id                            String   @id
+  name                          String
+  code                          String   @unique
+  logo                          String   @default("")
+  website                       String   @default("")
+  apiType                       String   @default("Generic")
+  trackingUrlTemplate           String   @default("")
+  supportedStates               String   @default("")
+  supportedCountries            String   @default("India")
+  maxWeight                     Float    @default(0)
+  maxDimensions                 String   @default("")
+  codAvailable                  Boolean  @default(true)
+  insuranceAvailable            Boolean  @default(false)
+  trackingAvailable             Boolean  @default(true)
+  estimatedDeliveryDaysDomestic Int      @default(3)
+  estimatedDeliveryDaysIntl     Int      @default(7)
+  priority                      Int      @default(0)
+  status                        String   @default("Active")
+  isDeleted                     Boolean  @default(false)
+  deletedAt                     DateTime?
+  deletedBy                     String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  orders                        Order[]
+
+  @@index([isDeleted])
+  @@map("couriermasters")
+}
+
+model PromoCode {
+  id                   String       @id
+  code                 String       @unique
+  title                String       @default("")
+  description          String       @default("")
+  discountType         String       @default("Percentage")
+  discountValue        Decimal      @default(0) @db.Decimal(12, 2)
+  maxDiscountAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  minOrderAmount       Decimal      @default(0) @db.Decimal(12, 2)
+  maxOrderAmount       Decimal      @default(0) @db.Decimal(12, 2)
+  startDate            DateTime?
+  endDate              DateTime?
+  usageLimit           Int          @default(0)
+  usedCount            Int          @default(0)
+  perUserLimit         Int          @default(1)
+  targetComponent      String       @default("Subtotal")
+  customerEligibility  String       @default("All")
+  specificCustomerIds  String[]
+  specificCustomerEmail String      @default("")
+  allowedPaymentMethods String[]    @default([])
+  allowedPincodes      String[]     @default([])
+  productIds           String[]     @default([])
+  categoryIds          String[]     @default([])
+  mainCategoryIds      String[]     @default([])
+  subCategoryIds       String[]     @default([])
+  productLimit         Int          @default(0)
+  isExclusive          Boolean      @default(false)
+  isStackable          Boolean      @default(false)
+  badgeColor           String       @default("#D97706")
+  backgroundColor      String       @default("#FEF3C7")
+  status               String       @default("Active")
+  isDeleted            Boolean      @default(false)
+  deletedAt            DateTime?
+  deletedBy            String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  promoUsages          PromoUsage[]
+
+  @@index([isDeleted])
+  @@map("promocodes")
+}
+
+// 23b. Promo Usage Redemption Log Entity
+model PromoUsage {
+  id             String     @id
+  promoCodeId    String
+  promoCode      PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Restrict)
+  userId         String?
+  user           User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orderId        String?
+  order          Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  discountAmount Decimal    @default(0) @db.Decimal(12, 2)
+  redeemedAt     DateTime   @default(now())
+
+  @@index([promoCodeId])
+  @@index([userId])
+  @@index([orderId])
+  @@index([promoCodeId, userId])
+  @@map("promousages")
+}
+
+
+// 24. Banner Entity
+model Banner {
+  id        String   @id
+  title     String   @default("")
+  image     String
+  link      String   @default("")
+  position  Int      @default(0)
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("banners")
+}
+
+// 25. Certificate Entity
+model Certificate {
+  id          String   @id
+  title       String   @default("")
+  image       String
+  description String   @default("")
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("certificates")
+}
+
+// 26. Contact Page Entity
+model ContactPage {
+  id               String   @id
+  pageTitle        String?  @default("Contact Us")
+  heading          String?  @default("Get In Touch")
+  description      String?  @default("")
+  storeName        String?  @default("")
+  phone            String   @default("")
+  secondaryPhone   String?  @default("")
+  email            String   @default("")
+  secondaryEmail   String?  @default("")
+  address          String   @default("")
+  mapUrl           String   @default("")
+  googleMapEmbed   String?  @default("")
+  workingHours     String   @default("")
+  businessHours    String?  @default("")
+  facebook         String?  @default("")
+  instagram        String?  @default("")
+  whatsapp         String?  @default("")
+  youtube          String?  @default("")
+  twitter          String?  @default("")
+  linkedin         String?  @default("")
+  pinterest        String?  @default("")
+  seoTitle         String?  @default("")
+  seoDescription   String?  @default("")
+  seoKeywords      String?  @default("")
+  ogImage          String?  @default("")
+  branches         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("contactpages")
+}
+
+// 27. Delivery Charge Rule Entity
+model DeliveryChargeRule {
+  id          String        @id
+  name        String
+  pricingMethod String      @default("FLAT")
+  minWeight   Decimal       @default(0) @db.Decimal(10, 3)
+  maxWeight   Decimal       @default(0) @db.Decimal(10, 3)
+  minQuantity Int           @default(0)
+  maxQuantity Int           @default(0)
+  baseCharge  Decimal       @default(0) @db.Decimal(12, 2)
+  perKgCharge Decimal       @default(0) @db.Decimal(12, 2)
+  perItemCharge Decimal     @default(0) @db.Decimal(12, 2)
+  deliveryTypes Json?
+  zoneId      String?
+  zone        DeliveryZone? @relation(fields: [zoneId], references: [id])
+  status      String        @default("Active")
+  isDeleted   Boolean       @default(false)
+  deletedAt   DateTime?
+  deletedBy   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([isDeleted])
+  @@map("deliverychargerules")
+}
+
+// 28. Delivery Zone Entity
+model DeliveryZone {
+  id                    String   @id
+  name                  String
+  code                  String   @unique
+  type                  String   @default("Domestic")
+  country               String   @default("India")
+  states                String[]
+  district              String   @default("")
+  pincodes              String[]
+  exclusivePincodes     String[]
+  priority              Int      @default(0)
+  description           String   @default("")
+  serviceable           Boolean  @default(true)
+  estimatedDeliveryDays Int      @default(3)
+  status                String   @default("Active")
+  isDeleted             Boolean  @default(false)
+  deletedAt             DateTime?
+  deletedBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  chargeRules DeliveryChargeRule[]
+
+  @@index([isDeleted])
+  @@map("deliveryzones")
+}
+
+// 30. FAQ Entity
+model FAQ {
+  id        String   @id
+  question  String
+  answer    String
+  category  String   @default("General")
+  position  Int      @default(0)
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+// 31. Featured Section Entity
+model FeaturedSection {
+  id                    String   @id
+  title                 String
+  shortDescription      String?
+  seoKeywordDescription String?
+  type                  String   @default("Grid")
+  selectType            String?
+  gridType              String?
+  carouselType          String?
+  mediaType             String?
+  productStyle          String?
+  productIds            String[]
+  items                 Json?
+  position              Int      @default(0)
+  status                String   @default("Active")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("featuredsections")
+}
+
+// 32. Invoice Counter Entity
+model InvoiceCounter {
+  id        String   @id
+  name      String   @unique @default("invoice")
+  seq       Int      @default(100000)
+  year      Int      @default(2026)
+  updatedAt DateTime @updatedAt
+
+  @@map("invoicecounters")
+}
+
+// 33. Order Flow Setting Entity
+model OrderFlowSetting {
+  id                  String   @id
+  name                String   @default("default")
+  autoConfirm         Boolean  @default(false)
+  requirePincodeCheck Boolean  @default(true)
+  allowCancellation   Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("orderflowsettings")
+}
+
+// 34. Otp Entity (Redis is primary temporary cache, PostgreSQL backup table)
+model Otp {
+  id           String   @id
+  phone        String   @unique
+  hashedOtp    String
+  expiresAt    DateTime
+  attempts     Int      @default(0)
+  requestCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("otps")
+}
+
+// 35. Packaging Rule Entity
+model PackagingRule {
+  id          String   @id
+  name        String
+  description String   @default("")
+  boxSize     String   @default("")
+  charge      Decimal  @default(0) @db.Decimal(12, 2)
+  gstRate     Decimal  @default(18) @db.Decimal(5, 2)
+  status      String   @default("Active")
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+  deletedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isDeleted])
+  @@map("packagingrules")
+}
+
+// 36. Payment Error Entity
+model PaymentError {
+  id          String   @id
+  orderId     String?
+  gateway     String
+  errorCode   String   @default("")
+  errorMessage String
+  rawError    Json?
+  isResolved  Boolean  @default(false)
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("paymenterrors")
+}
+
+// 37. Payment Gateway Setting Entity
+model PaymentGatewaySetting {
+  id          String   @id
+  gateway     String   @unique
+  displayName String
+  isEnabled   Boolean  @default(false)
+  isDefault   Boolean  @default(false)
+  environment String   @default("sandbox")
+  credentials Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("paymentgatewaysettings")
+}
+
+// 38. Payment Transaction Entity
+model PaymentTransaction {
+  id              String   @id
+  orderId         String
+  gateway         String
+  transactionId   String   @default("")
+  amount          Decimal  @default(0) @db.Decimal(12, 2)
+  currency        String   @default("INR")
+  status          String
+  gatewayResponse Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("paymenttransactions")
+}
+
+// 39. Scroll Heading Entity
+model ScrollHeading {
+  id              String   @id
+  title           String?  @default("")
+  text            String
+  link            String?  @default("")
+  position        Int      @default(0)
+  status          String   @default("Active")
+  backgroundColor String?  @default("#d98896")
+  color           String?  @default("#ffffff")
+  fontFamily      String?  @default("Outfit")
+  fontSize        String?  @default("14px")
+  fontStyle       String?  @default("normal")
+  fontWeight      String?  @default("700")
+  letterSpacing   String?  @default("normal")
+  speed           Int?     @default(6)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("scrollheadings")
+}
+
+// 41. Shipping Log Entity
+model ShippingLog {
+  id        String   @id
+  orderId   String
+  courier   String
+  action    String
+  payload   Json?
+  status    String
+  createdAt DateTime @default(now())
+
+  @@map("shippinglogs")
+}
+
+// 42. Shipping Setting Entity (Preserved for freeShippingMinAmount)
+model ShippingSetting {
+  id                    String   @id
+  defaultWarehouseId    String?
+  enableVolumetricWeight Boolean @default(true)
+  volumetricDivisor     Int      @default(5000)
+  freeShippingMinAmount Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("shippingsettings")
+}
+
+// 43. Store Promise Entity
+model StorePromise {
+  id          String   @id
+  title       String
+  icon        String   @default("")
+  description String   @default("")
+  position    Int      @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("storepromises")
+}
+
+// 47. Todays Deal Entity
+model TodaysDeal {
+  id                    String    @id
+  title                 String
+  shortDescription      String?
+  seoKeywordDescription String?
+  type                  String?   @default("main_category")
+  selectType            String?
+  gridType              String?
+  carouselType          String?
+  mediaType             String?
+  productStyle          String?
+  productIds            String[]
+  items                 Json?
+  position              Int       @default(0)
+  discountText          String?   @default("")
+  startDate             DateTime?
+  endDate               DateTime?
+  status                String    @default("Active")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("todaysdeals")
+}
+
+// 48. Todays Deal Banner Entity
+model TodaysDealBanner {
+  id        String   @id
+  title     String?  @default("")
+  image     String?  @default("")
+  link      String?  @default("")
+  linkType  String?  @default("")
+  linkId    String?  @default("")
+  linkUrl   String?  @default("")
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("todaysdealbanners")
+}
+
+// Warehouse Entity (Preserved for Inventory/Fulfillment)
+model Warehouse {
+  id            String   @id
+  name          String
+  code          String   @unique
+  contactPerson String   @default("")
+  phone         String   @default("")
+  email         String   @default("")
+  address       String
+  city          String
+  state         String
+  pincode       String
+  isDefault     Boolean  @default(false)
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("warehouses")
+}
+
+// Audit Log Entity
+model AuditLog {
+  id        String   @id
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  module    String
+  details   Json?
+  ipAddress String   @default("")
+  createdAt DateTime @default(now())
+
+  @@map("auditlogs")
+}
+
+// 49. Seller Master Entity
+model Seller {
+  id                String    @id
+  sellerId          String    @unique
+  businessName      String
+  sellerType        String    @default("Seller")
+  gstNumber         String?   @default("")
+  panNumber         String
+  contactPerson     String
+  email             String
+  mobileNumber      String
+  businessLocation  String
+  pincode           String
+  productCategory   String
+  agreementAccepted Boolean   @default(true)
+  status            String    @default("PENDING")
+  rejectionReason   String?   @default("")
+  approvedAt        DateTime?
+  approvedBy        String?   @default("")
+  rejectedAt        DateTime?
+  rejectedBy        String?   @default("")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([mobileNumber])
+  @@index([panNumber])
+  @@map("sellers")
+}
+
+// 50. Policy Entity (Delivery, Privacy, Terms, Return & Refund)
+enum PolicyType {
+  ABOUT
+  DELIVERY
+  PRIVACY
+  TERMS
+  RETURN_REFUND
+}
+
+model Policy {
+  id          String     @id
+  type        PolicyType @unique
+  title       String
+  slug        String     @unique
+  contentJson Json
+  contentHtml String
+  isPublished Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("policies")
+}
+
+model AdminSession {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jti       String    @unique
+  isRevoked Boolean   @default(false)
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([isRevoked, revokedAt])
+  @@index([expiresAt])
+  @@map("adminsessions")
+}
+

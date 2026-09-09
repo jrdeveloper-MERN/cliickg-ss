@@ -1,0 +1,23 @@
+# Compiled output
+/dist
+/node_modules
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.testing
+.env.production
+.env.stage
+
+# Ignore all .env files except example templates
+!.env.example
+!.env.production.example
+
+# Logs & Temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/uploads
+/coverage

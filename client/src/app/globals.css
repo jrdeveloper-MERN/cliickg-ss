@@ -1,0 +1,302 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,300;0,400;0,500;1,300&family=Tenor+Sans&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Primary & Secondary Brand Colors */
+  --color-primary: #023C23;
+  --color-primary-hover: #012b19;
+  --color-secondary: #F6C72A;
+  --color-secondary-hover: #e5b61b;
+  --color-primary-light: #f0fdf4;
+  --color-primary-border: #bbf7d0;
+
+  /* Palette Colors */
+  --color-accent-gold: #c9a84c;
+  --color-accent-gold-dark: #a18231;
+  --color-maroon-dark: #581c27;
+  --color-maroon-deep: #3e121a;
+  --color-emerald: #064e3b;
+  --color-emerald-dark: #022c22;
+  --color-navy-dark: #0f172a;
+
+  /* Background & Surface Colors */
+  --color-bg-light: #faf7f8;
+  --color-bg-white: #ffffff;
+
+  /* Typography & Border Colors */
+  --color-text-dark: #1e293b;
+  --color-text-muted: #64748b;
+  --color-border-light: #e2e8f0;
+
+  /* Backward-Compatible Legacy Aliases */
+  --primary-rose: var(--color-primary);
+  --primary-rose-dark: var(--color-secondary);
+  --rose-light: var(--color-primary-light);
+  --rose-border: var(--color-primary-border);
+  --accent-gold: var(--color-accent-gold);
+  --accent-gold-dark: var(--color-accent-gold-dark);
+  --dark-maroon: var(--color-maroon-dark);
+  --deep-maroon: var(--color-maroon-deep);
+  --emerald-green: var(--color-emerald);
+  --emerald-dark: var(--color-emerald-dark);
+  --dark-navy: var(--color-navy-dark);
+  --bg-light: var(--color-bg-light);
+  --bg-white: var(--color-bg-white);
+  --text-dark: var(--color-text-dark);
+  --text-muted: var(--color-text-muted);
+  --border-light: var(--color-border-light);
+
+  /* Elevation & Shape */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px -2px rgba(2, 60, 35, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 25px -5px rgba(2, 60, 35, 0.15);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Typography Fonts */
+  --heading-font: 'ivymode', 'Cormorant Garamond', 'Tenor Sans', 'Playfair Display', serif;
+  --font-serif: var(--heading-font);
+  --font-sans: 'Outfit', sans-serif;
+
+  /* Component Tokens */
+  --scroll-heading-bg: var(--color-primary, #023C23);
+  --scroll-heading-color: #ffffff;
+  --nav-text-color: var(--color-primary, #023C23);
+  --nav-hover-underline-color: var(--color-secondary, #F6C72A);
+  --btn-primary-bg: var(--color-primary, #023C23);
+  --btn-primary-color: #ffffff;
+  --btn-primary-hover-bg: var(--color-primary-hover, #012b19);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-light);
+  color: var(--text-dark);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Base Headings */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-serif {
+  font-family: var(--heading-font);
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-sans);
+}
+
+/* Prevent iOS Safari input auto-zoom by enforcing 16px font-size on mobile inputs */
+@media (max-width: 640px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Container Utility */
+.container {
+  width: min(100% - 2rem, 1360px);
+  margin-inline: auto;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .container {
+    width: min(100% - 1.25rem, 1360px);
+  }
+}
+
+/* Tiptap Rich-Text Editor HTML Content Styles */
+.tiptap-marquee-item,
+.tiptap-marquee-item p,
+.tiptap-marquee-item div,
+.tiptap-marquee-item span,
+.tiptap-marquee-item h1,
+.tiptap-marquee-item h2,
+.tiptap-marquee-item h3,
+.tiptap-marquee-item h4 {
+  display: inline !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: inherit !important;
+}
+
+.tiptap-marquee-item strong,
+.tiptap-marquee-item b {
+  font-weight: 800;
+  color: inherit;
+}
+
+.tiptap-marquee-item a {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.tiptap-content {
+  font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.tiptap-content video,
+.tiptap-content iframe,
+.tiptap-content embed,
+.tiptap-content object {
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  margin: 0.75rem 0;
+  border: 0;
+}
+
+.tiptap-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.75rem 0;
+  display: block;
+}
+
+.tiptap-content figure {
+  margin: 0.75rem 0;
+  max-width: 100%;
+}
+
+.tiptap-content figcaption {
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.tiptap-content p {
+  margin-bottom: 0.75rem;
+}
+
+.tiptap-content h1,
+.tiptap-content h2,
+.tiptap-content h3,
+.tiptap-content h4,
+.tiptap-content h5,
+.tiptap-content h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: #1e293b;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tiptap-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tiptap-content li {
+  margin-bottom: 0.35rem;
+}
+
+.tiptap-content strong,
+.tiptap-content b {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.tiptap-content blockquote {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 1rem;
+  color: #64748b;
+  font-style: italic;
+  margin: 1rem 0;
+}
+
+.tiptap-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.tiptap-content th,
+.tiptap-content td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.tiptap-content th {
+  background-color: var(--color-primary-light);
+  color: var(--color-secondary);
+  font-weight: 700;
+}
