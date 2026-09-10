@@ -5,6 +5,7 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { PromotionQueryDto } from './dto/promotion-query.dto';
 import { ValidatePromotionDto } from './dto/validate-promotion.dto';
+import { calculateItemPricing } from '../../common/utils/pricing-engine.util';
 
 @Injectable()
 export class PromotionsService {
@@ -599,7 +600,13 @@ export class PromotionsService {
                 id: true,
                 sku: true,
                 price: true,
+                offerPrice: true,
+                mrp: true,
+                gst: true,
+                gstMode: true,
+                taxMode: true,
                 status: true,
+                attributes: true,
               },
             },
           },
@@ -611,7 +618,7 @@ export class PromotionsService {
 
     for (const item of dto.cartItems) {
       const pId = String(item._id || item.productId || '');
-      const itemQty = Math.max(1, parseInt(String(item.quantity || 1), 10));
+      const itemQty = parseInt(String(item.quantity ?? 1), 10);
       if (isNaN(itemQty) || itemQty <= 0) continue;
 
       const dbP = prodMap.get(pId);
@@ -629,15 +636,23 @@ export class PromotionsService {
         }
       }
 
-      // Strictly use PostgreSQL authoritative ProductVariant.price (or fallback Product.price)
-      let serverUnitPrice = 0;
-      if (matchedVar && Number(matchedVar.price) > 0) {
-        serverUnitPrice = Number(matchedVar.price);
-      } else if (dbP && Number(dbP.price) > 0) {
-        serverUnitPrice = Number(dbP.price);
-      }
+      // Calculate authoritative canonical pricing using shared pricing engine
+      const pConfig = (matchedVar as any)?.attributes?.pricingConfig || {};
+      const pricing = calculateItemPricing({
+        mrp: matchedVar?.mrp ?? dbP?.price,
+        offerPrice: matchedVar?.offerPrice ?? matchedVar?.price ?? dbP?.price,
+        price: matchedVar?.price ?? dbP?.price,
+        discountType: pConfig.discountType,
+        discountValue: pConfig.discountValue,
+        gstRate: matchedVar?.gst ?? 0,
+        gstMode: (matchedVar as any)?.gstMode ?? pConfig.gstMode ?? 'EXCLUSIVE',
+        taxMode: (matchedVar as any)?.taxMode ?? pConfig.taxMode ?? pConfig.gstType ?? 'CGST_SGST',
+        quantity: itemQty,
+      });
 
-      const lineSubtotal = Math.round(serverUnitPrice * itemQty * 100) / 100;
+      // Canonical customer merchandise value: GST-inclusive final price * quantity
+      const serverUnitPrice = pricing.itemFinalPrice;
+      const lineSubtotal = pricing.lineTotal;
       calcSubtotal += lineSubtotal;
 
       let isEligible = true;
@@ -680,17 +695,17 @@ export class PromotionsService {
       });
     }
 
-    // 8. Min & Max Order Amount Validation
+    // 8. Min & Max Order Amount Validation against Customer Merchandise Value
     if (eligibleSubtotal < Number(promo.minOrderAmount || 0)) {
       throw new BadRequestException({
-        message: `Minimum subtotal of ₹${Number(promo.minOrderAmount || 0).toLocaleString('en-IN')} required to apply '${cleanCode}'.`,
+        message: `Minimum cart value of ₹${Number(promo.minOrderAmount || 0).toLocaleString('en-IN')} required to apply '${cleanCode}'.`,
         reasonCode: 'PROMO_MIN_ORDER_NOT_MET',
       });
     }
 
     if (Number(promo.maxOrderAmount || 0) > 0 && eligibleSubtotal > Number(promo.maxOrderAmount)) {
       throw new BadRequestException({
-        message: `Eligible cart subtotal exceeds maximum threshold of ₹${Number(promo.maxOrderAmount).toLocaleString('en-IN')} for '${cleanCode}'.`,
+        message: `Eligible cart value exceeds maximum threshold of ₹${Number(promo.maxOrderAmount).toLocaleString('en-IN')} for '${cleanCode}'.`,
         reasonCode: 'PROMO_MAX_ORDER_EXCEEDED',
       });
     }

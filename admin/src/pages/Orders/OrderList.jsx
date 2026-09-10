@@ -17,7 +17,7 @@ const ORDER_STATUS_OPTIONS = [
 ];
 
 const PAYMENT_STATUS_OPTIONS = [
-  'Pending', 'Initiated', 'Processing', 'Success', 'Failed', 'Cancelled', 'Refunded', 'Partially Refunded'
+  'Pending', 'Initiated', 'Processing', 'Success', 'Failed', 'Cancelled', 'Refunded'
 ];
 
 const OrderList = () => {

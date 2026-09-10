@@ -45,7 +45,7 @@ const ShippingTab = ({ order, onOpenPriceBreakup }) => {
         {/* COMPANY ADDRESS (Left Side) */}
         <div className="bg-admin-subtle p-5 rounded-xl border border-admin-border">
           <div className="flex items-center gap-2 mb-3 text-admin-accent font-bold text-sm">
-            <Building size={16} /> COMPANY ADDRESS (Sender / Dispatch)
+            <Building size={16} /> COMPANY ADDRESS 
           </div>
 
           <div className="text-xs text-admin-text-secondary leading-relaxed">

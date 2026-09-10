@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
 import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
@@ -8,6 +9,7 @@ import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { RecordPaymentFailureDto } from './dto/record-payment-failure.dto';
 import { ProcessRefundDto } from './dto/process-refund.dto';
 import { rollbackPromoUsageTx } from '../promotions/utils/promo-rollback.util';
+import { restoreItemsStockTx } from '../orders/utils/inventory-restore.util';
 import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
@@ -114,7 +116,9 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     // STRICT ZERO-TRUST: Always use order.total calculated server-side in PostgreSQL!
-    const serverAmount = Number(order.total);
+    const serverAmountDecimal = new Decimal(String(order.total));
+    const serverAmount = serverAmountDecimal.toNumber();
+    const amountInPaise = serverAmountDecimal.mul(100).round().toNumber();
     if (serverAmount <= 0) {
       throw new BadRequestException({
         success: false,
@@ -134,7 +138,6 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     // Attempt Live Razorpay Sandbox Order Creation if credentials exist
     if (keyId && keySecret && gatewayName.toLowerCase() === 'razorpay') {
       try {
-        const amountInPaise = Math.round(serverAmount * 100);
         const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
 
         const response = await fetch('https://api.razorpay.com/v1/orders', {
@@ -216,6 +219,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       paymentSessionId,
       gatewayOrderId,
       amount: serverAmount,
+      amountInPaise,
       currency: 'INR',
       orderId: order.orderId,
       orderNumber: order.orderNo,
@@ -286,6 +290,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       where: {
         OR: [{ id: orderId }, { orderId }, { orderNo: orderId }],
       },
+      include: { items: true },
     });
 
     if (!order) {
@@ -303,56 +308,102 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
+    // IDEMPOTENCY GUARD: If order is already in a terminal released state (e.g. FAILED, PAYMENT_EXPIRED, Cancelled),
+    // stock was already restored. Do not restore stock again!
+    if (order.orderStatus === 'FAILED' || order.orderStatus === 'PAYMENT_EXPIRED' || order.orderStatus === 'Cancelled') {
+      this.logger.log(`[Payment Failure Idempotent] Order ${order.orderId} is already in terminal state '${order.orderStatus}'. Returning existing state without stock restoration.`);
+      return {
+        success: true,
+        message: `Order is already marked as ${order.orderStatus}.`,
+        orderId: order.orderId,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        canRetry: true,
+      };
+    }
+
     const normalizedReason = reason || errorCode || 'USER_CANCELLED';
     const isCancelled = normalizedReason === 'USER_CANCELLED' || normalizedReason === 'CANCELLED';
     const statusText = isCancelled ? 'CANCELLED' : 'FAILED';
     const paymentStatusVal = isCancelled ? 'Cancelled' : 'Failed';
 
-    // Record PaymentTransaction attempt failure
-    if (order.transactionId) {
-      await this.prisma.paymentTransaction.updateMany({
-        where: { transactionId: order.transactionId },
+    // ATOMIC TRANSACTION: State transition PENDING_PAYMENT -> FAILED + exact stock restoration
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // 1. Atomic conditional update to guard against concurrent/duplicate transitions
+      const updateRes = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          orderStatus: 'PENDING_PAYMENT',
+        },
         data: {
-          status: statusText,
-          gatewayResponse: { reason: normalizedReason, errorCode, errorMessage, rawError },
+          paymentStatus: paymentStatusVal,
+          failureReason: normalizedReason,
+          orderStatus: 'FAILED',
+          lastGatewayResponse: { reason: normalizedReason, errorCode, errorMessage, recordedAt: new Date() },
         },
       });
-    }
 
-    // Log in PaymentError table for admin audit
-    await this.prisma.paymentError.create({
-      data: {
-        id: generateObjectId(),
-        orderId: order.orderId,
-        gateway: order.paymentGateway || 'razorpay',
-        errorCode: errorCode || normalizedReason,
-        errorMessage: errorMessage || `Payment ${statusText}: ${normalizedReason}`,
-        rawError: rawError ? (typeof rawError === 'string' ? { message: rawError } : rawError) : undefined,
-      },
-    });
+      if (updateRes.count === 0) {
+        // Was already transitioned concurrently by another request
+        return null;
+      }
 
-    // Record Timeline
-    await this.prisma.orderPaymentTimeline.create({
-      data: {
-        id: generateObjectId(),
-        orderId: order.id,
-        event: isCancelled ? 'PAYMENT_CANCELLED_BY_USER' : 'PAYMENT_FAILED',
-        status: statusText,
-        amount: Number(order.total),
-        gateway: order.paymentGateway || 'razorpay',
-        payload: { reason: normalizedReason, errorCode, errorMessage, gatewayOrderId, gatewayPaymentId },
-      },
-    });
+      // 2. Restore held inventory exactly once inside the same atomic transaction
+      await restoreItemsStockTx(tx, order.items, this.logger);
 
-    // Update Order payment status and preserve terminal FAILED state
-    const updated = await this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: paymentStatusVal,
-        failureReason: normalizedReason,
-        orderStatus: 'FAILED',
-        lastGatewayResponse: { reason: normalizedReason, errorCode, errorMessage, recordedAt: new Date() },
-      },
+      // 3. Rollback promo usage if applied
+      await rollbackPromoUsageTx(tx, order.id, this.logger);
+
+      // 4. Record PaymentTransaction attempt failure
+      if (order.transactionId) {
+        await tx.paymentTransaction.updateMany({
+          where: { transactionId: order.transactionId },
+          data: {
+            status: statusText,
+            gatewayResponse: { reason: normalizedReason, errorCode, errorMessage, rawError },
+          },
+        });
+      }
+
+      // 5. Log in PaymentError table for admin audit
+      await tx.paymentError.create({
+        data: {
+          id: generateObjectId(),
+          orderId: order.orderId,
+          gateway: order.paymentGateway || 'razorpay',
+          errorCode: errorCode || normalizedReason,
+          errorMessage: errorMessage || `Payment ${statusText}: ${normalizedReason}`,
+          rawError: rawError ? (typeof rawError === 'string' ? { message: rawError } : rawError) : undefined,
+        },
+      });
+
+      // 6. Record Timeline
+      await tx.orderPaymentTimeline.create({
+        data: {
+          id: generateObjectId(),
+          orderId: order.id,
+          event: isCancelled ? 'PAYMENT_CANCELLED_BY_USER' : 'PAYMENT_FAILED',
+          status: statusText,
+          amount: Number(order.total),
+          gateway: order.paymentGateway || 'razorpay',
+          payload: { reason: normalizedReason, errorCode, errorMessage, gatewayOrderId, gatewayPaymentId },
+        },
+      });
+
+      // 7. Record OrderStatusHistory
+      await tx.orderStatusHistory.create({
+        data: {
+          id: generateObjectId(),
+          orderId: order.id,
+          status: 'FAILED',
+          notes: `Payment ${statusText}: ${normalizedReason}`,
+          updatedBy: 'System',
+        },
+      });
+
+      return tx.order.findUnique({
+        where: { id: order.id },
+      });
     });
 
     try {
@@ -361,7 +412,19 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       // non-critical
     }
 
-    this.logger.log(`[Payment Failure Recorded] Order ${order.orderId} status set to FAILED (${paymentStatusVal} - ${normalizedReason}).`);
+    if (!updated) {
+      const currentOrder = await this.prisma.order.findUnique({ where: { id: order.id } });
+      return {
+        success: true,
+        message: `Payment attempt recorded as ${currentOrder?.orderStatus || statusText}.`,
+        orderId: order.orderId,
+        paymentStatus: currentOrder?.paymentStatus || paymentStatusVal,
+        orderStatus: currentOrder?.orderStatus || 'FAILED',
+        canRetry: true,
+      };
+    }
+
+    this.logger.log(`[Payment Failure Recorded] Order ${order.orderId} status set to FAILED (${paymentStatusVal} - ${normalizedReason}) and held stock restored.`);
 
     return {
       success: true,
@@ -417,23 +480,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         }
 
         // Restore inventory for each item safely ONCE
-        for (const item of ord.items) {
-          if (item.variantId) {
-            await tx.productVariant.updateMany({
-              where: { id: item.variantId },
-              data: {
-                stock: { increment: item.quantity },
-              },
-            });
-          } else if (item.productId) {
-            await tx.product.updateMany({
-              where: { id: item.productId },
-              data: {
-                stock: { increment: item.quantity },
-              },
-            });
-          }
-        }
+        await restoreItemsStockTx(tx, ord.items, this.logger);
 
         // Rollback promo usage if applied
         await rollbackPromoUsageTx(tx, ord.id, this.logger);
@@ -460,6 +507,150 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`[Payment Expiration] Marked ${processedCount} abandoned orders as PAYMENT_EXPIRED and restored inventory.`);
     return { expiredCount: processedCount };
+  }
+
+  // ================= AUTHORITATIVE PAYMENT FINALIZATION =================
+  private async handleOrphanCapturedPayment(
+    order: any,
+    paymentId: string,
+    paidAmount: number,
+    gatewayOrderId?: string,
+    gatewayName: string = 'razorpay',
+    reasonMessage?: string,
+  ) {
+    const failureMsg = reasonMessage || `Captured after order became ${order.orderStatus}. Automated refund initiated.`;
+
+    this.logger.warn(
+      `[Orphan Payment Captured] Payment ${paymentId} (₹${paidAmount}) captured for order ${order.orderId} (Status: ${order.orderStatus}). Initiating automated reconciliation & refund.`
+    );
+
+    // 1. Idempotency Check: Was an orphan refund already processed or initiated for this order/paymentId?
+    if (order.refundStatus === 'Refunded' || order.refundStatus === 'Initiated') {
+      this.logger.log(`[Orphan Payment] Payment ${paymentId} for order ${order.orderId} has already been submitted for refund.`);
+      return {
+        success: false,
+        message: `Order is in '${order.orderStatus}' status and payment has already been submitted for refund.`,
+        status: 'ORPHAN_PAYMENT_ALREADY_REFUNDED',
+        refundStatus: order.refundStatus,
+        orderStatus: order.orderStatus,
+        order,
+      };
+    }
+
+    // 2. Transactionally persist orphan payment audit records & update Order gatewayPaymentId
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          gatewayPaymentId: paymentId,
+          ...(gatewayOrderId && { gatewayOrderId }),
+          refundStatus: 'Initiated',
+          failureReason: failureMsg,
+          lastGatewayResponse: {
+            event: 'ORPHAN_PAYMENT_CAPTURED',
+            gatewayPaymentId: paymentId,
+            gatewayOrderId,
+            paidAmount,
+            capturedAt: new Date(),
+          },
+        },
+      });
+
+      const existingTx = await tx.paymentTransaction.findFirst({
+        where: { transactionId: paymentId },
+      });
+
+      if (!existingTx) {
+        await tx.paymentTransaction.create({
+          data: {
+            id: generateObjectId(),
+            orderId: order.orderId,
+            gateway: gatewayName,
+            transactionId: paymentId,
+            amount: paidAmount,
+            currency: 'INR',
+            status: 'ORPHAN_CAPTURED',
+            gatewayResponse: {
+              reason: failureMsg,
+              orderStatus: order.orderStatus,
+              paymentStatus: order.paymentStatus,
+              capturedAt: new Date(),
+            },
+          },
+        });
+      }
+
+      await tx.paymentError.create({
+        data: {
+          id: generateObjectId(),
+          orderId: order.orderId,
+          gateway: gatewayName,
+          errorCode: 'ORPHANED_CAPTURED_PAYMENT',
+          errorMessage: `Payment ${paymentId} (₹${paidAmount}) was captured for order ${order.orderId} (Status: ${order.orderStatus}). ${failureMsg}`,
+          rawError: {
+            gatewayPaymentId: paymentId,
+            gatewayOrderId,
+            amount: paidAmount,
+            orderStatus: order.orderStatus,
+            reason: failureMsg,
+          },
+        },
+      });
+
+      await tx.orderPaymentTimeline.create({
+        data: {
+          id: generateObjectId(),
+          orderId: order.id,
+          event: 'ORPHANED_PAYMENT_CAPTURED',
+          status: 'ORPHAN_CAPTURED',
+          amount: paidAmount,
+          gateway: gatewayName,
+          payload: {
+            gatewayPaymentId: paymentId,
+            gatewayOrderId,
+            orderStatus: order.orderStatus,
+            action: 'AUTOMATIC_REFUND_INITIATED',
+            reason: failureMsg,
+          },
+        },
+      });
+    });
+
+    // 3. Trigger automated Razorpay Refund via trusted processOrderRefund infrastructure
+    let refundResult: any = null;
+    try {
+      refundResult = await this.processOrderRefund(
+        {
+          orderId: order.id,
+          amount: paidAmount,
+          reason: failureMsg,
+          idempotencyKey: `ORPH_REF_${order.orderId}_${paymentId}`,
+          gatewayPaymentId: paymentId,
+        },
+        'System',
+        'admin',
+      );
+      this.logger.log(`[Orphan Payment Refund Success] Order ${order.orderId} (Payment: ${paymentId}): ${JSON.stringify(refundResult)}`);
+    } catch (rfErr: any) {
+      this.logger.error(`[Orphan Payment Refund Error] Order ${order.orderId} (Payment: ${paymentId}): ${rfErr.message}`);
+    }
+
+    const updatedOrder = await this.prisma.order.findUnique({
+      where: { id: order.id },
+      include: { items: true },
+    });
+
+    return {
+      success: false,
+      message: `Payment received after order was ${order.orderStatus}. Order remains ${order.orderStatus} and an automated refund has been initiated.`,
+      status: 'ORPHAN_PAYMENT_REFUND_INITIATED',
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      refundStatus: updatedOrder?.refundStatus || 'Initiated',
+      gatewayPaymentId: paymentId,
+      refundResult,
+      order: updatedOrder,
+    };
   }
 
   // ================= AUTHORITATIVE PAYMENT FINALIZATION =================
@@ -498,138 +689,24 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     const paymentId = gatewayPaymentId || `PAY_${Date.now().toString().slice(-8)}`;
 
     // Terminal State Handling: Handle captured payments on PAYMENT_EXPIRED or CANCELLED orders
-    const isTerminal = order.orderStatus === 'PAYMENT_EXPIRED' ||
-                       order.paymentStatus === 'EXPIRED' ||
-                       order.orderStatus === 'CANCELLED' ||
-                       order.orderStatus === 'Cancelled' ||
-                       order.isDeleted;
+    const isTerminal =
+      order.orderStatus === 'PAYMENT_EXPIRED' ||
+      order.paymentStatus === 'EXPIRED' ||
+      order.orderStatus === 'CANCELLED' ||
+      order.orderStatus === 'Cancelled' ||
+      order.isDeleted;
 
     if (isTerminal) {
       const serverTotal = Number(order.total);
       const paidAmount = gatewayPaidAmount !== undefined && gatewayPaidAmount !== null ? gatewayPaidAmount : serverTotal;
-
-      this.logger.warn(`[Orphan Payment Captured] Payment ${paymentId} (₹${paidAmount}) captured for terminal order ${order.orderId} (Status: ${order.orderStatus}). Initiating automated reconciliation & refund.`);
-
-      // 1. Idempotency Check: Was an orphan refund already processed or initiated for this order/paymentId?
-      if (order.refundStatus === 'Refunded' || order.refundStatus === 'Initiated') {
-        this.logger.log(`[Orphan Payment] Payment ${paymentId} for order ${order.orderId} has already been submitted for refund.`);
-        return {
-          success: false,
-          message: `Order is in '${order.orderStatus}' status and payment has already been submitted for refund.`,
-          status: 'ORPHAN_PAYMENT_ALREADY_REFUNDED',
-          refundStatus: order.refundStatus,
-          orderStatus: order.orderStatus,
-          order,
-        };
-      }
-
-      // 2. Transactionally persist orphan payment audit records & update Order gatewayPaymentId
-      await this.prisma.$transaction(async (tx) => {
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            gatewayPaymentId: paymentId,
-            ...(gatewayOrderId && { gatewayOrderId }),
-            refundStatus: 'Initiated',
-            failureReason: `Captured after order became ${order.orderStatus}. Automated refund initiated.`,
-            lastGatewayResponse: {
-              event: 'ORPHAN_PAYMENT_CAPTURED',
-              gatewayPaymentId: paymentId,
-              gatewayOrderId,
-              paidAmount,
-              capturedAt: new Date(),
-            },
-          },
-        });
-
-        const existingTx = await tx.paymentTransaction.findFirst({
-          where: { transactionId: paymentId },
-        });
-
-        if (!existingTx) {
-          await tx.paymentTransaction.create({
-            data: {
-              id: generateObjectId(),
-              orderId: order.orderId,
-              gateway: gatewayName,
-              transactionId: paymentId,
-              amount: paidAmount,
-              currency: 'INR',
-              status: 'ORPHAN_CAPTURED',
-              gatewayResponse: {
-                reason: 'CAPTURED_AFTER_EXPIRY_OR_CANCELLATION',
-                orderStatus: order.orderStatus,
-                paymentStatus: order.paymentStatus,
-                capturedAt: new Date(),
-              },
-            },
-          });
-        }
-
-        await tx.paymentError.create({
-          data: {
-            id: generateObjectId(),
-            orderId: order.orderId,
-            gateway: gatewayName,
-            errorCode: 'ORPHANED_CAPTURED_PAYMENT',
-            errorMessage: `Payment ${paymentId} (₹${paidAmount}) was captured after order became ${order.orderStatus}. Automated refund initiated.`,
-            rawError: {
-              gatewayPaymentId: paymentId,
-              gatewayOrderId,
-              amount: paidAmount,
-              orderStatus: order.orderStatus,
-            },
-          },
-        });
-
-        await tx.orderPaymentTimeline.create({
-          data: {
-            id: generateObjectId(),
-            orderId: order.id,
-            event: 'ORPHANED_PAYMENT_CAPTURED',
-            status: 'ORPHAN_CAPTURED',
-            amount: paidAmount,
-            gateway: gatewayName,
-            payload: { gatewayPaymentId: paymentId, gatewayOrderId, orderStatus: order.orderStatus, action: 'AUTOMATIC_REFUND_INITIATED' },
-          },
-        });
-      });
-
-      // 3. Trigger automated Razorpay Refund via trusted processOrderRefund infrastructure
-      let refundResult: any = null;
-      try {
-        refundResult = await this.processOrderRefund(
-          {
-            orderId: order.id,
-            amount: paidAmount,
-            reason: `Automated refund for payment captured after order was ${order.orderStatus}`,
-            idempotencyKey: `ORPH_REF_${order.orderId}_${paymentId}`,
-            gatewayPaymentId: paymentId,
-          },
-          'System',
-          'admin',
-        );
-        this.logger.log(`[Orphan Payment Refund Success] Order ${order.orderId} (Payment: ${paymentId}): ${JSON.stringify(refundResult)}`);
-      } catch (rfErr: any) {
-        this.logger.error(`[Orphan Payment Refund Error] Order ${order.orderId} (Payment: ${paymentId}): ${rfErr.message}`);
-      }
-
-      const updatedOrder = await this.prisma.order.findUnique({
-        where: { id: order.id },
-        include: { items: true },
-      });
-
-      return {
-        success: false,
-        message: `Payment received after order was ${order.orderStatus}. Order remains ${order.orderStatus} and an automated refund has been initiated.`,
-        status: 'ORPHAN_PAYMENT_REFUND_INITIATED',
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
-        refundStatus: updatedOrder?.refundStatus || 'Initiated',
-        gatewayPaymentId: paymentId,
-        refundResult,
-        order: updatedOrder,
-      };
+      return this.handleOrphanCapturedPayment(
+        order,
+        paymentId,
+        paidAmount,
+        gatewayOrderId,
+        gatewayName,
+        `Captured after order became ${order.orderStatus}. Automated refund initiated.`,
+      );
     }
 
     const serverTotal = Number(order.total);
@@ -647,86 +724,179 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     const year = new Date().getFullYear();
     const invoiceNo = order.invoiceNo || `INV-${year}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const finalizedOrder = await this.prisma.$transaction(async (tx) => {
-      // 1. Update Order status PENDING_PAYMENT -> Received, paymentStatus -> Paid
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: 'Paid',
-          orderStatus: 'Received',
-          invoiceNo,
-          invoiceStatus: 'Generated',
-          invoiceGeneratedAt: order.invoiceGeneratedAt || new Date(),
-          paidAt: new Date(),
-          webhookVerified: true,
-          amountPaid: serverTotal,
-          gatewayPaymentId: paymentId,
-          ...(gatewayOrderId && { gatewayOrderId }),
-        },
-        include: { items: true },
-      });
+    const isOrderFailed = order.orderStatus === 'FAILED' || order.orderStatus === 'Failed';
 
-      // 2. Update or create PaymentTransaction
-      if (order.transactionId && tx.paymentTransaction?.updateMany) {
-        await tx.paymentTransaction.updateMany({
-          where: { transactionId: order.transactionId },
-          data: {
-            status: 'SUCCESS',
-            amount: serverTotal,
-          },
+    let finalizedOrder: any;
+    try {
+      finalizedOrder = await this.prisma.$transaction(async (tx) => {
+        // Concurrency check inside transaction: has order been finalized concurrently?
+        const targetOrder = await tx.order.findUnique({
+          where: { id: order.id },
+          include: { items: true },
         });
-      } else if (tx.paymentTransaction?.create) {
-        await tx.paymentTransaction.create({
-          data: {
-            id: generateObjectId(),
-            orderId: order.orderId,
-            gateway: gatewayName,
-            transactionId: paymentId,
-            amount: serverTotal,
-            currency: 'INR',
-            status: 'SUCCESS',
-          },
-        });
-      }
 
-      // 3. Append to OrderPaymentTimeline
-      if (tx.orderPaymentTimeline?.create) {
-        await tx.orderPaymentTimeline.create({
-          data: {
-            id: generateObjectId(),
-            orderId: order.id,
-            event: 'PAYMENT_SUCCESS',
-            status: 'SUCCESS',
-            amount: serverTotal,
-            gateway: gatewayName,
-            payload: { gatewayPaymentId: paymentId, gatewayOrderId },
-          },
-        });
-      }
-
-      // 4. Create OrderStatusHistory
-      if (tx.orderStatusHistory?.create) {
-        await tx.orderStatusHistory.create({
-          data: {
-            id: generateObjectId(),
-            orderId: order.id,
-            status: 'Received',
-            notes: `Payment verified successfully via ${gatewayName}. Transaction ID: ${paymentId}`,
-            updatedBy: 'System',
-          },
-        });
-      }
-
-      // 5. Clear customer cart on verified payment success
-      if (order.userId) {
-        const userCart = await tx.cart.findFirst({ where: { userId: order.userId } });
-        if (userCart) {
-          await tx.cartItem.deleteMany({ where: { cartId: userCart.id } });
+        if (!targetOrder || ['Paid', 'Success', 'PAID'].includes(targetOrder.paymentStatus)) {
+          throw new Error('ORDER_ALREADY_FINALIZED');
         }
+
+        // If the order entered FAILED status earlier, its inventory was restored.
+        // We MUST atomically reacquire the inventory before allowing FAILED -> Received / Paid!
+        if (targetOrder.orderStatus === 'FAILED' || targetOrder.orderStatus === 'Failed') {
+          for (const item of targetOrder.items) {
+            if (item.variantId) {
+              const res = await tx.productVariant.updateMany({
+                where: {
+                  id: item.variantId,
+                  stock: { gte: item.quantity },
+                },
+                data: {
+                  stock: { decrement: item.quantity },
+                },
+              });
+              if (res.count === 0) {
+                throw new Error(`INSUFFICIENT_STOCK_FOR_REACQUISITION:variant:${item.variantId}`);
+              }
+            } else if (item.productId) {
+              const res = await tx.product.updateMany({
+                where: {
+                  id: item.productId,
+                  stock: { gte: item.quantity },
+                },
+                data: {
+                  stock: { decrement: item.quantity },
+                },
+              });
+              if (res.count === 0) {
+                throw new Error(`INSUFFICIENT_STOCK_FOR_REACQUISITION:product:${item.productId}`);
+              }
+            }
+          }
+        }
+
+        // 1. Update Order status PENDING_PAYMENT / FAILED -> Received, paymentStatus -> Paid atomically
+        const updateRes = await tx.order.updateMany({
+          where: {
+            id: order.id,
+            orderStatus: { in: ['PENDING_PAYMENT', 'FAILED', 'Failed'] },
+            paymentStatus: { notIn: ['Paid', 'Success', 'PAID'] },
+          },
+          data: {
+            paymentStatus: 'Paid',
+            orderStatus: 'Received',
+            invoiceNo,
+            invoiceStatus: 'Generated',
+            invoiceGeneratedAt: order.invoiceGeneratedAt || new Date(),
+            paidAt: new Date(),
+            webhookVerified: true,
+            amountPaid: serverTotal,
+            gatewayPaymentId: paymentId,
+            ...(gatewayOrderId && { gatewayOrderId }),
+          },
+        });
+
+        if (updateRes.count === 0) {
+          throw new Error('ORDER_ALREADY_FINALIZED');
+        }
+
+        const updated = await tx.order.findUnique({
+          where: { id: order.id },
+          include: { items: true },
+        });
+
+        // 2. Update or create PaymentTransaction
+        if (order.transactionId && tx.paymentTransaction?.updateMany) {
+          await tx.paymentTransaction.updateMany({
+            where: { transactionId: order.transactionId },
+            data: {
+              status: 'SUCCESS',
+              amount: serverTotal,
+            },
+          });
+        } else if (tx.paymentTransaction?.create) {
+          await tx.paymentTransaction.create({
+            data: {
+              id: generateObjectId(),
+              orderId: order.orderId,
+              gateway: gatewayName,
+              transactionId: paymentId,
+              amount: serverTotal,
+              currency: 'INR',
+              status: 'SUCCESS',
+            },
+          });
+        }
+
+        // 3. Append to OrderPaymentTimeline
+        if (tx.orderPaymentTimeline?.create) {
+          await tx.orderPaymentTimeline.create({
+            data: {
+              id: generateObjectId(),
+              orderId: order.id,
+              event: isOrderFailed ? 'PAYMENT_RECOVERY_SUCCESS' : 'PAYMENT_SUCCESS',
+              status: 'SUCCESS',
+              amount: serverTotal,
+              gateway: gatewayName,
+              payload: { gatewayPaymentId: paymentId, gatewayOrderId, reacquiredInventory: isOrderFailed },
+            },
+          });
+        }
+
+        // 4. Create OrderStatusHistory
+        if (tx.orderStatusHistory?.create) {
+          await tx.orderStatusHistory.create({
+            data: {
+              id: generateObjectId(),
+              orderId: order.id,
+              status: 'Received',
+              notes: isOrderFailed
+                ? `Payment verified successfully via ${gatewayName} (recovered from FAILED). Inventory reacquired. Transaction ID: ${paymentId}`
+                : `Payment verified successfully via ${gatewayName}. Transaction ID: ${paymentId}`,
+              updatedBy: 'System',
+            },
+          });
+        }
+
+        // 5. Clear customer cart on verified payment success
+        if (order.userId) {
+          const userCart = await tx.cart.findFirst({ where: { userId: order.userId } });
+          if (userCart) {
+            await tx.cartItem.deleteMany({ where: { cartId: userCart.id } });
+          }
+        }
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (err.message && err.message.startsWith('INSUFFICIENT_STOCK_FOR_REACQUISITION')) {
+        this.logger.error(
+          `[Inventory Reacquisition Failed] Order ${order.orderId} was FAILED, but required inventory is unavailable for payment ${paymentId}. Routing to automated orphan payment refund.`
+        );
+        return await this.handleOrphanCapturedPayment(
+          order,
+          paymentId,
+          gatewayPaidAmount !== undefined && gatewayPaidAmount !== null ? gatewayPaidAmount : serverTotal,
+          gatewayOrderId,
+          gatewayName,
+          'Insufficient inventory available to fulfill retry on failed order. Automated refund initiated.',
+        );
       }
 
-      return updated;
-    });
+      if (err.message === 'ORDER_ALREADY_FINALIZED') {
+        const latestOrder = await this.prisma.order.findUnique({
+          where: { id: order.id },
+          include: { items: true },
+        });
+        return {
+          success: true,
+          message: 'Payment already verified and processed',
+          status: 'SUCCESS',
+          invoiceNo: latestOrder?.invoiceNo,
+          order: latestOrder,
+        };
+      }
+
+      throw err;
+    }
 
     this.logger.log(`[Payment Finalization] Order ${order.orderId} finalized successfully (Paid ₹${serverTotal}). Cart cleared.`);
 
@@ -897,22 +1067,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     // 2. Authorization / IDOR Protection
     this.verifyOrderOwnership(order, requestingUserId, requestingUserRole);
 
-    // 3. Payment Status Check (Allows standard paid orders OR orphan captured payments on expired/cancelled orders)
-    const isPaid = ['Paid', 'Success', 'PAID'].includes(order.paymentStatus);
-    const isOrphanPayment = order.orderStatus === 'PAYMENT_EXPIRED' ||
-                            order.paymentStatus === 'EXPIRED' ||
-                            order.orderStatus === 'CANCELLED' ||
-                            order.orderStatus === 'Cancelled' ||
-                            Boolean(dto.gatewayPaymentId);
-
-    if (!isPaid && !isOrphanPayment) {
-      throw new BadRequestException({
-        success: false,
-        message: `Order ${order.orderId} is not in a paid or orphaned state (Current payment status: '${order.paymentStatus}'). Cannot process refund.`,
-      });
-    }
-
-    // 4. Idempotency Check: Already fully refunded?
+    // 3. Idempotency Check: Already fully refunded?
     if (order.refundStatus === 'Refunded' || order.paymentStatus === 'Refunded') {
       this.logger.log(`[Razorpay Refund] Order ${order.orderId} is already fully refunded.`);
       return {
@@ -944,23 +1099,52 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // 5. Zero-Trust Server Amount Calculation
+    // 4. Payment Status Check (Allows standard paid orders OR orphan captured payments on expired/cancelled orders)
+    const isPaid = ['Paid', 'Success', 'PAID', 'Refund Initiated'].includes(order.paymentStatus);
+    const isOrphanPayment = order.orderStatus === 'PAYMENT_EXPIRED' ||
+                            order.paymentStatus === 'EXPIRED' ||
+                            order.orderStatus === 'CANCELLED' ||
+                            order.orderStatus === 'Cancelled' ||
+                            Boolean(dto.gatewayPaymentId);
+
+    if (!isPaid && !isOrphanPayment) {
+      throw new BadRequestException({
+        success: false,
+        message: `Order ${order.orderId} is not in a paid or orphaned state (Current payment status: '${order.paymentStatus}'). Cannot process refund.`,
+      });
+    }
+
+    // 5. Zero-Trust Server Amount Calculation: ONE ORDER = ONE FULL REFUND ONLY
     const serverTotal = Number(order.total);
     let refundAmount = serverTotal;
 
     if (amount !== undefined && amount !== null) {
       const requestedAmt = Number(amount);
       if (isNaN(requestedAmt) || requestedAmt <= 0) {
-        throw new BadRequestException({ success: false, message: 'Refund amount must be a positive number greater than zero.' });
-      }
-      if (requestedAmt > serverTotal) {
         throw new BadRequestException({
           success: false,
+          code: 'INVALID_REFUND_AMOUNT',
+          message: 'Refund amount must be a positive number greater than zero.',
+          errors: ['INVALID_REFUND_AMOUNT'],
+        });
+      }
+      if (requestedAmt > serverTotal + 0.01) {
+        throw new BadRequestException({
+          success: false,
+          code: 'REFUND_AMOUNT_EXCEEDS_PAID_AMOUNT',
           message: `Refund amount (₹${requestedAmt}) cannot exceed total paid order amount (₹${serverTotal}).`,
           errors: ['REFUND_AMOUNT_EXCEEDS_PAID_AMOUNT'],
         });
       }
-      refundAmount = requestedAmt;
+      if (requestedAmt < serverTotal - 0.01) {
+        throw new BadRequestException({
+          success: false,
+          code: 'REFUND_PARTIAL_NOT_SUPPORTED',
+          message: `Partial refunds are not supported. Only full refunds of the eligible order amount (₹${serverTotal}) are permitted.`,
+          errors: ['REFUND_PARTIAL_NOT_SUPPORTED'],
+        });
+      }
+      refundAmount = serverTotal;
     }
 
     const gatewayPaymentId = dto.gatewayPaymentId || order.gatewayPaymentId || order.paymentSessionId || order.transactionId;
@@ -1200,7 +1384,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       const isCompleted = refundState === 'processed' || refundState === 'completed';
 
       const finalRefundStatus = isCompleted ? 'Refunded' : 'Initiated';
-      const finalPaymentStatus = isCompleted ? 'Refunded' : 'Partially Refunded';
+      const finalPaymentStatus = isCompleted ? 'Refunded' : 'Refund Initiated';
 
       const updatedOrder = await this.prisma.$transaction(async (tx) => {
         const updated = await tx.order.update({

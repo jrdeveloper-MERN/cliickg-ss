@@ -54,8 +54,16 @@ export const normalizeCartItem = (rawItem: any): CartItem => {
   );
 
   const stock = getAvailableStock(rawItem);
-  const price = Number(rawItem.price || rawItem.sellingPrice || rawItem.serverCalculatedPrice || 0);
-  const sellingPrice = Number(rawItem.sellingPrice || rawItem.price || rawItem.serverCalculatedPrice || 0);
+  const finalUnitPrice = Number(
+    rawItem.itemFinalPrice ??
+    rawItem.finalPrice ??
+    rawItem.sellingPrice ??
+    rawItem.price ??
+    rawItem.serverCalculatedPrice ??
+    0
+  );
+  const price = finalUnitPrice;
+  const sellingPrice = finalUnitPrice;
   const mrp = Number(rawItem.mrp || rawItem.price || sellingPrice);
 
   const image = rawItem.image || rawItem.productImage || rawItem.product?.image || (Array.isArray(rawItem.product?.images) ? rawItem.product.images[0] : '') || '';
@@ -77,6 +85,20 @@ export const normalizeCartItem = (rawItem: any): CartItem => {
     sellingPrice,
     mrp,
     serverCalculatedPrice: Number(rawItem.serverCalculatedPrice || sellingPrice),
+    offerPrice: rawItem.offerPrice !== undefined ? Number(rawItem.offerPrice) : undefined,
+    taxableAmount: rawItem.taxableAmount !== undefined ? Number(rawItem.taxableAmount) : undefined,
+    gstRate: rawItem.gstRate !== undefined ? Number(rawItem.gstRate) : undefined,
+    gstAmount: rawItem.gstAmount !== undefined ? Number(rawItem.gstAmount) : undefined,
+    cgstAmount: rawItem.cgstAmount !== undefined ? Number(rawItem.cgstAmount) : undefined,
+    sgstAmount: rawItem.sgstAmount !== undefined ? Number(rawItem.sgstAmount) : undefined,
+    igstAmount: rawItem.igstAmount !== undefined ? Number(rawItem.igstAmount) : undefined,
+    finalPrice: rawItem.finalPrice !== undefined ? Number(rawItem.finalPrice) : finalUnitPrice,
+    itemFinalPrice: rawItem.itemFinalPrice !== undefined ? Number(rawItem.itemFinalPrice) : finalUnitPrice,
+    lineTaxableSubtotal: rawItem.lineTaxableSubtotal !== undefined ? Number(rawItem.lineTaxableSubtotal) : undefined,
+    lineGstTotal: rawItem.lineGstTotal !== undefined ? Number(rawItem.lineGstTotal) : undefined,
+    lineTotal: rawItem.lineTotal !== undefined ? Number(rawItem.lineTotal) : undefined,
+    gstMode: rawItem.gstMode,
+    taxMode: rawItem.taxMode,
   };
 };
 
@@ -142,6 +164,8 @@ interface CartContextType {
   clearPromo: () => void;
   cartCount: number;
   cartTotal: number;
+  cartTaxableSubtotal: number;
+  cartGstTotal: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -571,7 +595,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
   const cartCount = cart.reduce((total, item) => total + (item.quantity || 1), 0);
-  const cartTotal = cart.reduce((total, item) => total + (item.sellingPrice || item.price || 0) * (item.quantity || 1), 0);
+  const cartTotal = Number(
+    cart.reduce((total, item) => total + (item.sellingPrice || item.price || 0) * (item.quantity || 1), 0).toFixed(2)
+  );
+  const cartTaxableSubtotal = Number(
+    cart.reduce((total, item) => {
+      const taxable = item.taxableAmount !== undefined ? item.taxableAmount : (item.sellingPrice || item.price || 0);
+      return total + taxable * (item.quantity || 1);
+    }, 0).toFixed(2)
+  );
+  const cartGstTotal = Number(
+    cart.reduce((total, item) => {
+      const gst = item.gstAmount !== undefined ? item.gstAmount : 0;
+      return total + gst * (item.quantity || 1);
+    }, 0).toFixed(2)
+  );
 
   return (
     <CartContext.Provider
@@ -598,6 +636,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearPromo,
         cartCount,
         cartTotal,
+        cartTaxableSubtotal,
+        cartGstTotal,
       }}
     >
       {children}

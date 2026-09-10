@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService, REDIS_KEYS, REDIS_TTLS } from '../../redis/redis.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
 import { SyncCartDto, SyncCartItemDto } from './dto/sync-cart.dto';
+import { calculateItemPricing } from '../../common/utils/pricing-engine.util';
 
 @Injectable()
 export class CartService {
@@ -105,6 +106,20 @@ export class CartService {
             : (prod.variants && prod.variants.length > 0 ? prod.variants[0] : null);
 
           const variantStock = matchedVariant ? Number(matchedVariant.stock) : Number(prod.stock || 0);
+          const effectiveQty = variantStock > 0 ? Math.min(item.quantity, variantStock) : item.quantity;
+
+          const pConfig = matchedVariant?.attributes?.pricingConfig || {};
+          const pricing = calculateItemPricing({
+            mrp: matchedVariant?.mrp ?? prod.price,
+            offerPrice: matchedVariant?.offerPrice ?? matchedVariant?.price ?? prod.price,
+            price: matchedVariant?.price ?? prod.price,
+            discountType: pConfig.discountType,
+            discountValue: pConfig.discountValue,
+            gstRate: matchedVariant?.gst ?? 0,
+            gstMode: matchedVariant?.gstMode ?? 'EXCLUSIVE',
+            taxMode: matchedVariant?.taxMode ?? 'CGST_SGST',
+            quantity: effectiveQty,
+          });
 
           return {
             ...prod,
@@ -119,11 +134,25 @@ export class CartService {
             metalType: matchedVariant?.metalType || item.selectedAttributes?.metalType || prod.metalType || null,
             stock: variantStock,
             stockQuantity: variantStock,
-            quantity: variantStock > 0 ? Math.min(item.quantity, variantStock) : item.quantity,
+            quantity: effectiveQty,
             selectedSize: item.selectedSize || item.selectedAttributes?.selectedSize || '',
-            serverCalculatedPrice: Number(item.price),
-            price: Number(matchedVariant?.price || item.price || prod.price),
-            sellingPrice: Number(matchedVariant?.price || item.price || prod.price),
+            serverCalculatedPrice: pricing.itemFinalPrice,
+            price: pricing.itemFinalPrice,
+            sellingPrice: pricing.itemFinalPrice,
+            finalPrice: pricing.itemFinalPrice,
+            mrp: pricing.mrp,
+            offerPrice: pricing.offerPrice,
+            taxableAmount: pricing.taxableAmount,
+            gstRate: pricing.gstRate,
+            gstAmount: pricing.gstAmount,
+            taxMode: pricing.taxMode,
+            gstMode: pricing.gstMode,
+            cgstAmount: pricing.cgstAmount,
+            sgstAmount: pricing.sgstAmount,
+            igstAmount: pricing.igstAmount,
+            lineTaxableSubtotal: pricing.lineTaxableSubtotal,
+            lineGstTotal: pricing.lineGstTotal,
+            lineTotal: pricing.lineTotal,
           };
         }
         return null;
@@ -222,11 +251,21 @@ export class CartService {
         });
       }
 
-      // Determine server-side price (NEVER TRUST CLIENT PRICES!)
-      let serverUnitPrice = Number(product.price);
-      if (selectedVariant && Number(selectedVariant.price) > 0) {
-        serverUnitPrice = Number(selectedVariant.price);
-      }
+      // Determine server-side price using authoritative pricing engine (NEVER TRUST CLIENT PRICES!)
+      const pConfig = selectedVariant?.attributes?.pricingConfig || {};
+      const pricing = calculateItemPricing({
+        mrp: selectedVariant?.mrp ?? product.price,
+        offerPrice: selectedVariant?.offerPrice ?? selectedVariant?.price ?? product.price,
+        price: selectedVariant?.price ?? product.price,
+        discountType: pConfig.discountType,
+        discountValue: pConfig.discountValue,
+        gstRate: selectedVariant?.gst ?? 0,
+        gstMode: selectedVariant?.gstMode ?? 'EXCLUSIVE',
+        taxMode: selectedVariant?.taxMode ?? 'CGST_SGST',
+        quantity,
+      });
+
+      const serverUnitPrice = pricing.itemFinalPrice;
 
       if (serverUnitPrice <= 0) {
         throw new BadRequestException({

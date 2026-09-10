@@ -10,6 +10,7 @@ import { Product } from '../../types/products/product.types';
 import { Category, AttributeCaption } from '../../types/categories/category.types';
 import ErrorState from '../../components/ui/ErrorState/ErrorState';
 import { parseAppError, isNetworkOrServerDown, AppError } from '../../utils/error-handler.utils';
+import { calculatePricing } from '../../utils/pricing.utils';
 
 // True Dual-Thumb Range Slider Component (Two Handles on a Single Track)
 const TrueDualRangeSlider: React.FC<{
@@ -255,15 +256,49 @@ function ShopContent() {
   };
 
   const getProductPrice = useCallback((p: Product) => {
+    const details = p.productDetails || p.variants || [];
+    const first = (details && details.length > 0 ? details[0] : p) as any;
+    const prodAny = p as any;
+    const activeDetail = {
+      ...prodAny,
+      ...first,
+      mrp: first.mrp !== undefined && first.mrp !== '' ? first.mrp : prodAny.mrp,
+      offerPrice:
+        first.offerPrice !== undefined && first.offerPrice !== ''
+          ? first.offerPrice
+          : (first.sellingPrice || first.price || prodAny.sellingPrice || prodAny.price),
+      enableGst:
+        first.enableGst !== undefined
+          ? first.enableGst
+          : first.attributes?.pricingConfig?.enableGst !== undefined
+            ? first.attributes.pricingConfig.enableGst
+            : prodAny.enableGst !== undefined
+              ? prodAny.enableGst
+              : true,
+      gstMode:
+        first.gstMode ||
+        first.attributes?.pricingConfig?.gstMode ||
+        prodAny.gstMode ||
+        'EXCLUSIVE',
+      gstType:
+        first.gstType ||
+        first.attributes?.pricingConfig?.gstType ||
+        prodAny.gstType ||
+        'CGST + SGST',
+      finalGstRate:
+        first.gst !== undefined && first.gst !== ''
+          ? first.gst
+          : prodAny.finalGstRate !== undefined && prodAny.finalGstRate !== ''
+            ? prodAny.finalGstRate
+            : prodAny.gst !== undefined
+              ? prodAny.gst
+              : 0,
+    };
+    const pricing = calculatePricing(activeDetail);
+    const finalPrice = Number(pricing.finalPayablePrice || pricing.finalPrice || 0);
+    if (finalPrice > 0) return finalPrice;
     if (p.sellingPrice && Number(p.sellingPrice) > 0) return Number(p.sellingPrice);
     if (p.price && Number(p.price) > 0) return Number(p.price);
-    const details = p.productDetails || p.variants || [];
-    if (details && details.length > 0) {
-      const first = details[0];
-      if (first.finalPrice && Number(first.finalPrice) > 0) return Number(first.finalPrice);
-      if (first.price && Number(first.price) > 0) return Number(first.price);
-      if (first.basePrice && Number(first.basePrice) > 0) return Number(first.basePrice);
-    }
     return 0;
   }, []);
 
@@ -771,7 +806,7 @@ function ShopContent() {
 
   if (pageError) {
     return (
-      <div className="w-[min(100%-2rem,1360px)] md:w-[min(100%-3rem,1360px)] mx-auto py-14">
+      <div className="w-full min-h-[75vh] flex items-center justify-center">
         <ErrorState error={pageError} onRetry={fetchProducts} fullPage />
       </div>
     );

@@ -88,7 +88,7 @@ export default function OrderDetailPage() {
 
   if (pageError) {
     return (
-      <div className="w-[min(100%-2rem,1360px)] md:w-[min(100%-3rem,1360px)] mx-auto py-14">
+      <div className="w-full min-h-[75vh] flex items-center justify-center">
         <ErrorState error={pageError} onRetry={fetchOrder} fullPage />
       </div>
     );

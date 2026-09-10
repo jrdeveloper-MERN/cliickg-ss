@@ -16,7 +16,7 @@ const ALLOWED_TRANSITIONS = {
   Processing: ['Shipped', 'Cancelled'],
   Shipped: ['Delivered', 'Cancelled'],
   Delivered: ['Return Requested'],
-  'Return Requested': ['Returned', 'Cancelled'],
+  'Return Requested': ['Returned', 'Delivered', 'Cancelled'],
   Returned: ['Refund Initiated'],
   'Refund Initiated': ['Refunded', 'Cancelled'],
   Refunded: [],

@@ -32,10 +32,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const token = localStorage.getItem('customer_token');
     if (!token) {
+      if (typeof document !== 'undefined') {
+        document.cookie = 'customer_token=; path=/; max-age=0; SameSite=Lax';
+      }
       setUser(null);
       setCustomer(null);
       setLoading(false);
       return;
+    }
+    if (typeof document !== 'undefined') {
+      document.cookie = `customer_token=${token}; path=/; max-age=2592000; SameSite=Lax`;
     }
     try {
       const data = await authService.getMe();
@@ -54,6 +60,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error('Auth verification failed:', err);
       localStorage.removeItem('customer_token');
+      if (typeof document !== 'undefined') {
+        document.cookie = 'customer_token=; path=/; max-age=0; SameSite=Lax';
+      }
       setUser(null);
       setCustomer(null);
     } finally {
@@ -77,6 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (res.success && token) {
       localStorage.setItem('customer_token', token);
+      if (typeof document !== 'undefined') {
+        document.cookie = `customer_token=${token}; path=/; max-age=2592000; SameSite=Lax`;
+      }
       setUser(userData || null);
       setCustomer(customerData || null);
       await checkAuth();
@@ -112,6 +124,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (typeof window !== 'undefined') {
         localStorage.removeItem('customer_token');
         localStorage.removeItem('token');
+        if (typeof document !== 'undefined') {
+          document.cookie = 'customer_token=; path=/; max-age=0; SameSite=Lax';
+        }
       }
       setUser(null);
       setCustomer(null);

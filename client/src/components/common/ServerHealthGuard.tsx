@@ -74,11 +74,12 @@ export const ServerHealthGuard: React.FC<ServerHealthGuardProps> = ({ children }
 
   if (isBackendDown) {
     return (
-      <div className="min-h-[60vh] w-full flex items-center justify-center py-8 px-4">
+      <div className="min-h-[85vh] w-full flex items-center justify-center">
         <ErrorState
           error={serverError}
           onRetry={retryConnection}
           showHomeButton
+          fullPage
         />
       </div>
     );

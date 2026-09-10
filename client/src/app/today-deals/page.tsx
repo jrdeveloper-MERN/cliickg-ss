@@ -393,10 +393,8 @@ export default function TodayDealsPage() {
 
   if (pageError) {
     return (
-      <div className="w-full min-h-[60vh] overflow-x-hidden">
-        <div className="w-[min(100%-2rem,1360px)] md:w-[min(100%-3rem,1360px)] mx-auto py-12 px-4">
-          <ErrorState error={pageError} onRetry={fetchAllData} fullPage={false} />
-        </div>
+      <div className="w-full min-h-[75vh] flex items-center justify-center">
+        <ErrorState error={pageError} onRetry={fetchAllData} fullPage />
       </div>
     );
   }

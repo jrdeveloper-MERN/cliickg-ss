@@ -12,6 +12,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { rollbackPromoUsageTx } from '../promotions/utils/promo-rollback.util';
 import { RedisService } from '../../redis/redis.service';
+import { calculateItemPricing } from '../../common/utils/pricing-engine.util';
+import { restoreItemsStockTx } from './utils/inventory-restore.util';
 
 const Decimal = Prisma.Decimal;
 
@@ -23,6 +25,7 @@ const INVENTORY_RELEASED_STATUSES = new Set([
   'REFUND_INITIATED',
   'PAYMENT_EXPIRED',
   'DELETED',
+  'FAILED',
 ]);
 
 export function isInventoryReleasedStatus(status: string | null | undefined): boolean {
@@ -413,76 +416,33 @@ export class OrdersService {
         });
       }
 
-      const serverUnitPrice = matchedVariant && Number(matchedVariant.price) > 0
-        ? Number(matchedVariant.price)
-        : Number(dbProd.price || 0);
+      const pConfig = (matchedVariant as any)?.attributes?.pricingConfig || {};
+      const pricing = calculateItemPricing({
+        mrp: matchedVariant?.mrp ?? dbProd.price,
+        offerPrice: matchedVariant?.offerPrice ?? matchedVariant?.price ?? dbProd.price,
+        price: matchedVariant?.price ?? dbProd.price,
+        discountType: pConfig.discountType,
+        discountValue: pConfig.discountValue,
+        gstRate: matchedVariant?.gst ?? 0,
+        gstMode: (matchedVariant as any)?.gstMode ?? pConfig.gstMode ?? 'EXCLUSIVE',
+        taxMode: (matchedVariant as any)?.taxMode ?? pConfig.taxMode ?? pConfig.gstType ?? 'CGST_SGST',
+        quantity: item.quantity,
+      });
 
-      if (serverUnitPrice <= 0) {
+      if (pricing.itemFinalPrice <= 0) {
         throw new BadRequestException({
           message: `Product '${dbProd.name}' lacks valid pricing configuration in PostgreSQL. Cannot proceed with order placement.`,
           errors: ['MISSING_PRICE_CONFIGURATION'],
         });
       }
 
-      const itemSubtotal = serverUnitPrice * item.quantity;
-      subtotal += itemSubtotal;
+      // Accumulate authoritative taxable subtotal and GST total
+      subtotal += pricing.lineTaxableSubtotal;
+      totalGstAmount += pricing.lineGstTotal;
 
       const grossWeight = Number((matchedVariant as any)?.grossWeight || (item as any).grossWeight || 0);
       const netWeight = Number((matchedVariant as any)?.netWeight || (item as any).netWeight || 0);
       const makingCharges = Number((matchedVariant as any)?.makingCharges || (item as any).makingCharges || 0);
-
-      // Server-side GST calculation based on matchedVariant configuration using Prisma.Decimal
-      const pConfig = (matchedVariant as any)?.attributes?.pricingConfig || {};
-      const enableGst = pConfig.enableGst !== undefined
-        ? Boolean(pConfig.enableGst)
-        : (matchedVariant?.gst !== undefined && matchedVariant?.gst !== null && Number(matchedVariant.gst) > 0);
-      const variantGstRateDec = enableGst ? Decimal.max(new Decimal(0), new Decimal(String(matchedVariant?.gst || 0))) : new Decimal(0);
-      const variantGstRate = variantGstRateDec.toNumber();
-
-      const rawGstMode = (matchedVariant as any)?.gstMode || pConfig.gstMode || 'EXCLUSIVE';
-      const gstMode = String(rawGstMode).toUpperCase() === 'INCLUSIVE' ? 'INCLUSIVE' : 'EXCLUSIVE';
-      
-      const rawTaxMode = (matchedVariant as any)?.taxMode || pConfig.taxMode || pConfig.gstType || 'CGST_SGST';
-      const taxMode = (rawTaxMode === 'IGST' || rawTaxMode === 'igst') ? 'IGST' : 'CGST_SGST';
-      const isCgstSgst = taxMode === 'CGST_SGST';
-      const gstType = isCgstSgst ? 'CGST + SGST' : 'IGST';
-
-      const itemSubtotalDec = new Decimal(String(itemSubtotal || 0));
-
-      let itemTaxableDec = itemSubtotalDec;
-      let itemTotalGstDec = new Decimal(0);
-      let cgstDec = new Decimal(0);
-      let sgstDec = new Decimal(0);
-      let igstDec = new Decimal(0);
-      let itemTotalPriceDec = itemSubtotalDec;
-
-      if (enableGst && variantGstRateDec.gt(0)) {
-        if (gstMode === 'INCLUSIVE') {
-          // Offer price (serverUnitPrice) ALREADY includes GST
-          // Taxable = itemSubtotal * 100 / (100 + rate)
-          const divisor = new Decimal(100).add(variantGstRateDec);
-          itemTaxableDec = itemSubtotalDec.mul(100).div(divisor).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-          itemTotalGstDec = itemSubtotalDec.minus(itemTaxableDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-          itemTotalPriceDec = itemSubtotalDec;
-        } else {
-          // EXCLUSIVE: GST is added on top of itemSubtotal
-          itemTaxableDec = itemSubtotalDec;
-          itemTotalGstDec = itemSubtotalDec.mul(variantGstRateDec).div(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-          itemTotalPriceDec = itemSubtotalDec.add(itemTotalGstDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-        }
-
-        if (isCgstSgst) {
-          cgstDec = itemTotalGstDec.div(2).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-          sgstDec = itemTotalGstDec.minus(cgstDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-          igstDec = new Decimal(0);
-        } else {
-          igstDec = itemTotalGstDec;
-          cgstDec = new Decimal(0);
-          sgstDec = new Decimal(0);
-        }
-      }
-
-      totalGstAmount += itemTotalGstDec.toNumber();
 
       orderItemsData.push({
         id: generateObjectId(),
@@ -492,31 +452,33 @@ export class OrdersService {
         variantId: matchedVariant ? matchedVariant.id : null,
         sku: item.sku || (matchedVariant ? matchedVariant.sku : '') || '',
         quantity: item.quantity,
-        unitPrice: serverUnitPrice,
-        totalPrice: itemTotalPriceDec.toNumber(),
+        unitPrice: pricing.itemFinalPrice,
+        totalPrice: pricing.lineTotal,
         attributes: {
           variantName: matchedVariant ? `${item.selectedSize || item.purity || 'Standard'}` : 'Standard',
           purity: item.selectedSize || item.purity || '',
           grossWeight,
           netWeight,
           makingCharges,
-          mrp: Number(matchedVariant?.mrp || 0),
-          offerPrice: Number(matchedVariant?.offerPrice || serverUnitPrice),
-          price: serverUnitPrice,
-          enableGst,
-          gstRate: variantGstRate,
-          gstMode,
-          taxMode,
-          gstType,
-          taxableAmount: itemTaxableDec.toNumber(),
-          cgstRate: isCgstSgst ? variantGstRate / 2 : 0,
-          sgstRate: isCgstSgst ? variantGstRate / 2 : 0,
-          cgstAmount: cgstDec.toNumber(),
-          sgstAmount: sgstDec.toNumber(),
-          igstAmount: igstDec.toNumber(),
-          gstAmount: itemTotalGstDec.toNumber(),
-          gst: itemTotalGstDec.toNumber(),
-          subtotal: itemSubtotal,
+          mrp: pricing.mrp,
+          discountAmount: pricing.discountAmount,
+          offerPrice: pricing.offerPrice,
+          price: pricing.itemFinalPrice,
+          enableGst: pricing.gstRate > 0,
+          gstRate: pricing.gstRate,
+          gstMode: pricing.gstMode,
+          taxMode: pricing.taxMode,
+          gstType: pricing.taxMode === 'IGST' ? 'IGST' : 'CGST + SGST',
+          taxableAmount: pricing.taxableAmount,
+          cgstRate: pricing.taxMode === 'CGST_SGST' ? pricing.gstRate / 2 : 0,
+          sgstRate: pricing.taxMode === 'CGST_SGST' ? pricing.gstRate / 2 : 0,
+          cgstAmount: pricing.cgstAmount,
+          sgstAmount: pricing.sgstAmount,
+          igstAmount: pricing.igstAmount,
+          gstAmount: pricing.gstAmount,
+          gst: pricing.lineGstTotal,
+          subtotal: pricing.lineTaxableSubtotal,
+          itemTotal: pricing.lineTotal,
         },
       });
 
@@ -590,7 +552,13 @@ export class OrdersService {
 
     const isOnline = Boolean(dto.paymentMethod && dto.paymentMethod.toUpperCase() !== 'COD');
     const shippingFee = shippingCalc.totalShipping || 0;
-    const finalPayableAmount = Math.max(0, Math.round((subtotal + totalGstAmount + shippingFee - promoDiscount) * 100) / 100);
+    const packagingFee = shippingCalc.packagingCharge || 0;
+    const subtotalRounded = Math.round(subtotal * 100) / 100;
+    const gstTotalRounded = Math.round(totalGstAmount * 100) / 100;
+    const finalPayableAmount = Math.max(
+      0,
+      Math.round((subtotalRounded + gstTotalRounded + shippingFee + packagingFee - promoDiscount) * 100) / 100
+    );
 
     const orderSeq = await this.prisma.getNextSequence('order', 1);
     const canonicalOrderFormatted = `CLIICKG-ORD-${String(orderSeq).padStart(6, '0')}`;
@@ -762,10 +730,10 @@ export class OrdersService {
           orderStatus: initialOrderStatus,
           invoiceStatus: 'Pending',
           total: finalPayableAmount,
-          subtotal,
+          subtotal: subtotalRounded,
           shippingFee,
-          packagingFee: shippingCalc.packagingCharge || 0,
-          gstTotal: Math.round(totalGstAmount * 100) / 100,
+          packagingFee,
+          gstTotal: gstTotalRounded,
           promoCode: validPromoCode,
           promoDiscount,
           promotionSnapshot: promoSnapshot ? JSON.parse(JSON.stringify(promoSnapshot)) : undefined,
@@ -837,28 +805,8 @@ export class OrdersService {
   }
 
   private async restoreItemsStockTx(tx: any, items: any[]): Promise<void> {
-    if (!items || items.length === 0) return;
-
-    for (const item of items) {
-      if (item.variantId) {
-        await tx.productVariant.updateMany({
-          where: { id: item.variantId },
-          data: {
-            stock: { increment: item.quantity },
-          },
-        });
-      } else if (item.productId) {
-        await tx.product.updateMany({
-          where: { id: item.productId },
-          data: {
-            stock: { increment: item.quantity },
-          },
-        });
-      }
-    }
+    return restoreItemsStockTx(tx, items, this.logger);
   }
-
-
 
   async updateStatus(id: string, orderStatus: string, notes?: string, updatedBy?: string, reason?: string) {
     const existing = await this.getById(id);
@@ -872,21 +820,27 @@ export class OrdersService {
     }
 
     const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-      PENDING_PAYMENT: ['Received', 'PAYMENT_EXPIRED', 'Cancelled'],
+      PENDING_PAYMENT: ['Received', 'PAYMENT_EXPIRED', 'Cancelled', 'FAILED'],
       Received: ['Processing', 'Cancelled'],
       Processing: ['Shipped', 'Cancelled'],
       Shipped: ['Delivered', 'Cancelled'],
       Delivered: ['Return Requested'],
-      'Return Requested': ['Returned', 'Cancelled'],
+      'Return Requested': ['Returned', 'Delivered', 'Cancelled'],
       Returned: ['Refund Initiated'],
       'Refund Initiated': ['Refunded', 'Cancelled'],
       Refunded: [],
       Cancelled: ['Refund Initiated'],
       PAYMENT_EXPIRED: ['Cancelled'],
+      FAILED: ['Cancelled'],
       DELETED: [],
     };
 
-    return this.prisma.$transaction(async (tx) => {
+    let shouldDispatchRefund = false;
+    let refundTargetOrderId = '';
+
+    const trimmedReason = (reason || notes || '').trim();
+
+    const updated = await this.prisma.$transaction(async (tx) => {
       const currentOrder = await tx.order.findUnique({
         where: { id: existing.id },
         include: { items: true },
@@ -913,7 +867,14 @@ export class OrdersService {
         await rollbackPromoUsageTx(tx, currentOrder.id, this.logger);
       }
 
-      const trimmedReason = (reason || notes || '').trim();
+      const isReturnRejection = currentOrder.orderStatus === 'Return Requested' && orderStatus === 'Delivered';
+      const historyNotes = notes || (
+        orderStatus === 'Cancelled'
+          ? `Order cancelled by admin. Reason: ${trimmedReason}`
+          : isReturnRejection
+            ? `Return request rejected by admin. Order status reverted to Delivered.`
+            : `Order status updated to ${orderStatus}`
+      );
 
       const updateData: any = {
         orderStatus,
@@ -922,12 +883,26 @@ export class OrdersService {
             {
               id: historyId,
               status: orderStatus,
-              notes: notes || (orderStatus === 'Cancelled' ? `Order cancelled by admin. Reason: ${trimmedReason}` : `Order status updated to ${orderStatus}`),
+              notes: historyNotes,
               updatedBy: updatedBy || 'Admin',
             },
           ],
         },
       };
+
+      if (isReturnRejection) {
+        updateData.returnStatus = 'REJECTED';
+        if (currentOrder.refundStatus === 'Pending') {
+          updateData.refundStatus = 'None';
+        }
+        await tx.returnRequest.updateMany({
+          where: { orderId: currentOrder.id },
+          data: {
+            status: 'REJECTED',
+            refundStatus: 'None',
+          },
+        });
+      }
 
       if (orderStatus === 'Cancelled') {
         if (currentOrder.paymentStatus === 'Paid') {
@@ -935,7 +910,7 @@ export class OrdersService {
         }
       } else if (orderStatus === 'Refund Initiated') {
         updateData.refundStatus = 'Initiated';
-        updateData.paymentStatus = 'Partially Refunded';
+        updateData.paymentStatus = 'Refund Initiated';
         updateData.paymentTimeline = {
           create: [
             {
@@ -965,28 +940,36 @@ export class OrdersService {
         };
       }
 
-      const updated = await tx.order.update({
+      const txUpdated = await tx.order.update({
         where: { id: currentOrder.id },
         data: updateData,
         include: { items: true, statusHistory: true },
       });
 
-      // Trigger automated Razorpay refund call when moving to Refund Initiated or Refunded
+      refundTargetOrderId = currentOrder.id;
       if ((orderStatus === 'Refund Initiated' || orderStatus === 'Refunded') && ['Paid', 'Success', 'PAID'].includes(currentOrder.paymentStatus)) {
-        try {
-          await this.paymentsService.processOrderRefund(
-            { orderId: currentOrder.id, reason: trimmedReason },
-            updatedBy,
-            'admin',
-          );
-        } catch (rfErr: any) {
-          this.logger.warn(`[Automated Refund] Triggered from status change to '${orderStatus}' encountered: ${rfErr.message}`);
-        }
+        shouldDispatchRefund = true;
       }
 
-      await this.invalidateDashboardCache();
-      return attachCancellationDetails(updated);
+      return txUpdated;
     });
+
+    // Outer database transaction has COMMITTED successfully.
+    // DEF-ORD-001: Trigger automated Razorpay refund call OUTSIDE the Prisma transaction boundary
+    if (shouldDispatchRefund && refundTargetOrderId) {
+      try {
+        await this.paymentsService.processOrderRefund(
+          { orderId: refundTargetOrderId, reason: trimmedReason },
+          updatedBy,
+          'admin',
+        );
+      } catch (rfErr: any) {
+        this.logger.warn(`[Automated Refund] Triggered from status change to '${orderStatus}' encountered: ${rfErr.message}`);
+      }
+    }
+
+    await this.invalidateDashboardCache();
+    return attachCancellationDetails(updated);
   }
 
   async updatePaymentStatus(id: string, paymentStatus: string, updatedBy?: string) {

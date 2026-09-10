@@ -181,7 +181,7 @@ export default function MyOrdersPage() {
 
   if (pageError) {
     return (
-      <div className="w-[min(100%-2rem,1360px)] md:w-[min(100%-3rem,1360px)] mx-auto py-14">
+      <div className="w-full min-h-[75vh] flex items-center justify-center">
         <ErrorState error={pageError} onRetry={fetchOrders} fullPage />
       </div>
     );
@@ -310,6 +310,14 @@ export default function MyOrdersPage() {
       </div>
     );
   };
+
+  if (authLoading || !user) {
+    return (
+      <div className="w-[min(100%-2rem,920px)] mx-auto py-24 text-center min-h-[50vh] flex items-center justify-center">
+        <div className="text-slate-500 font-semibold animate-pulse">Loading orders...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-120px)] py-10">

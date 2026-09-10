@@ -209,7 +209,7 @@ export default function ProductDetailPage() {
 
   if (pageError) {
     return (
-      <div className="w-[min(100%-2rem,1360px)] md:w-[min(100%-3rem,1360px)] mx-auto py-14">
+      <div className="w-full min-h-[75vh] flex items-center justify-center">
         <ErrorState error={pageError} onRetry={fetchProductAndData} fullPage />
       </div>
     );
@@ -739,7 +739,7 @@ export default function ProductDetailPage() {
                     }`}
                   title={`View image ${idx + 1}`}
                 >
-                  <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover rounded-lg" />
+                  <img src={getImageUrl(img)} alt={`${product.name} thumbnail ${idx + 1}`} className="w-full h-full object-cover rounded-lg" />
                 </button>
               ))}
             </div>

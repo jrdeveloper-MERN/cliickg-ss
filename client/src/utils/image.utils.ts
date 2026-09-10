@@ -14,7 +14,7 @@ export const getImageUrl = (path?: any): string => {
 
   strPath = strPath.trim();
 
-  // Route logo references directly to public /logo.png static asset
+  // Route logo references directly to public /logo.jpg static asset
   if (
     strPath === '/logo.png' ||
     strPath === 'logo.png' ||
@@ -24,7 +24,7 @@ export const getImageUrl = (path?: any): string => {
     strPath.startsWith('/logo') ||
     strPath.startsWith('logo.')
   ) {
-    return '/logo.png';
+    return '/logo.jpg';
   }
 
   if (strPath.startsWith('http://') || strPath.startsWith('https://') || strPath.startsWith('data:')) {

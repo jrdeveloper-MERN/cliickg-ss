@@ -56,8 +56,8 @@ export const Footer: React.FC = () => {
         <div>
           <div className="h-[60px] w-[180px] overflow-hidden flex items-center justify-center mb-4">
             <img
-              src={getImageUrl((contactData as any)?.logo || '/logo.png')}
-              alt="Logo"
+              src={getImageUrl((contactData as any)?.logo || '/logo.jpg')}
+              alt="CLIICKG"
               width="180"
               height="60"
               className="w-[180px] h-[60px] object-contain"

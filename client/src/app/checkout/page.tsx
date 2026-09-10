@@ -10,6 +10,7 @@ import orderService from '../../services/order.service';
 import paymentService from '../../services/payment.service';
 import shippingService from '../../services/shipping.service';
 import getImageUrl from '../../utils/image.utils';
+import { calculatePricing } from '../../utils/pricing.utils';
 import { Address } from '../../types/auth/auth.types';
 import { PaymentGateway } from '../../types/payments/payment.types';
 import { CheckoutSkeleton } from '../../components/ui/Skeleton/Skeleton';
@@ -141,7 +142,17 @@ function PaymentSuccessScreen({
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, cartTotal, promoDiscount, appliedPromoCode, clearCart, cartLoading, isCartLoaded } = useCart();
+  const {
+    cart,
+    cartTotal,
+    cartTaxableSubtotal,
+    cartGstTotal,
+    promoDiscount,
+    appliedPromoCode,
+    clearCart,
+    cartLoading,
+    isCartLoaded,
+  } = useCart();
   const { user, customer, updateProfile, loading: authLoading } = useAuth();
 
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -613,10 +624,6 @@ export default function CheckoutPage() {
     setSubmitting(true);
 
     try {
-      const selectedCalc = shippingCalculations?.deliveryTypes?.[selectedDeliveryType] || { totalShippingCost: 0 };
-      const totalShippingCost = Number(selectedCalc.totalShippingCost) || 0;
-      const grandTotal = Number(shippingCalculations.finalTotal) || Math.max(0, Math.round(cartTotal - promoDiscount + totalShippingCost));
-
       const formattedFullAddress = `${formData.address}${formData.address2 ? ', ' + formData.address2 : ''}${formData.area ? ', ' + formData.area : ''}${formData.landmark ? ' (Landmark: ' + formData.landmark + ')' : ''}, ${formData.city}, ${formData.state} - ${formData.pincode}`;
 
       const orderPayload = {
@@ -645,7 +652,7 @@ export default function CheckoutPage() {
       let createdOrderId = createdOrder?.id || (createdOrder as any)?._id || (createdOrder as any)?.orderId;
 
       const activeOrderTotal = Number((createdOrder as any)?.total || 0);
-      if (!createdOrderId || (activeOrderTotal > 0 && Math.abs(activeOrderTotal - grandTotal) > 0.01)) {
+      if (!createdOrderId || (activeOrderTotal > 0 && Math.abs(activeOrderTotal - grandTotal) > 0.001)) {
         createdOrder = await orderService.createOrder(orderPayload);
         createdOrderId = createdOrder.id || (createdOrder as any)._id || (createdOrder as any).orderId || `ORD_${Date.now().toString().slice(-6)}`;
         setActiveOrder(createdOrder);
@@ -653,9 +660,31 @@ export default function CheckoutPage() {
 
       const paymentOrder = await paymentService.createPaymentOrder({
         gateway: selectedGatewayCode || 'razorpay',
-        amount: grandTotal,
+        amount: Number(createdOrder.total),
         orderId: createdOrderId,
       });
+
+      // PAYMENT CONSISTENCY GUARD (Strict Invariant: Checkout displayed == Order.total == Gateway amount)
+      const checkoutTotalPaise = Math.round(grandTotal * 100);
+      const orderTotalPaise = Math.round(Number(createdOrder.total) * 100);
+      const paymentOrderPaise = Number(paymentOrder.amountInPaise || Math.round(Number(paymentOrder.amount) * 100));
+
+      if (checkoutTotalPaise !== orderTotalPaise || orderTotalPaise !== paymentOrderPaise) {
+        console.error('Financial Invariant Violation:', {
+          checkoutTotalPaise,
+          orderTotalPaise,
+          paymentOrderPaise,
+          grandTotal,
+          orderTotal: createdOrder.total,
+          paymentAmount: paymentOrder.amount,
+        });
+        showToast(
+          `Price mismatch detected (Checkout: ₹${(checkoutTotalPaise / 100).toFixed(2)}, Order: ₹${(orderTotalPaise / 100).toFixed(2)}, Payment: ₹${(paymentOrderPaise / 100).toFixed(2)}). Please refresh and try again.`,
+          'error'
+        );
+        setSubmitting(false);
+        return;
+      }
 
       if (typeof window !== 'undefined' && !(window as any).Razorpay) {
         await new Promise((resolve) => {
@@ -682,7 +711,7 @@ export default function CheckoutPage() {
 
         const options = {
           key: rzpKey,
-          amount: Math.round(grandTotal * 100),
+          amount: paymentOrder.amountInPaise || orderTotalPaise,
           currency: paymentOrder?.currency || 'INR',
           order_id: rzpOrderId,
           description: `Order #${(createdOrder as any)?.orderNo || createdOrderId}`,
@@ -723,8 +752,9 @@ export default function CheckoutPage() {
                   reason: 'USER_CANCELLED',
                   errorMessage: 'Customer closed the payment gateway popup window.',
                 });
-                showToast('Payment window closed. Your order is saved and can be retried.', 'info');
+                showToast('Payment window closed. Please click Confirm & Place Order to retry.', 'info');
               }
+              setActiveOrder(null);
             },
           },
         };
@@ -758,6 +788,18 @@ export default function CheckoutPage() {
       }
     } catch (err: any) {
       console.error('Order placement error:', err);
+      const errMsg = String(err?.message || err?.response?.data?.message || '');
+      const isOrderNonRetryable =
+        errMsg.includes('This order payment has failed. Please initiate a new checkout to retry.') ||
+        errMsg.includes('payment session has expired') ||
+        errMsg.includes('FAILED') ||
+        errMsg.includes('EXPIRED') ||
+        errMsg.includes('Order is already marked as') ||
+        errMsg.includes('not found');
+
+      if (isOrderNonRetryable) {
+        setActiveOrder(null);
+      }
       alert(err.message || 'Failed to place order. Please try again.');
     } finally {
       setSubmitting(false);
@@ -792,7 +834,40 @@ export default function CheckoutPage() {
     0
   );
   const packagingFee = Number(shippingCalculations?.packagingCharge ?? 0);
-  const grandTotal = Math.max(0, Math.round(cartTotal - promoDiscount + totalShippingCost + packagingFee));
+
+  // Authoritative Taxable Subtotal and GST Total breakdown calculation
+  const { calculatedTaxableSubtotal, calculatedGstTotal } = cart.reduce(
+    (acc, item: any) => {
+      const qty = Math.max(1, Number(item.quantity || 1));
+      let itemTaxable = item.taxableAmount !== undefined ? Number(item.taxableAmount) : NaN;
+      let itemGst = item.gstAmount !== undefined ? Number(item.gstAmount) : NaN;
+      if (isNaN(itemTaxable) || isNaN(itemGst)) {
+        const p = calculatePricing(item);
+        itemTaxable = p.taxableAmount;
+        itemGst = p.finalGstAmount;
+      }
+      return {
+        calculatedTaxableSubtotal: acc.calculatedTaxableSubtotal + itemTaxable * qty,
+        calculatedGstTotal: acc.calculatedGstTotal + itemGst * qty,
+      };
+    },
+    { calculatedTaxableSubtotal: 0, calculatedGstTotal: 0 }
+  );
+
+  const taxableSubtotalRounded = Math.round(calculatedTaxableSubtotal * 100) / 100;
+  const gstTotalRounded = Math.round(calculatedGstTotal * 100) / 100;
+  const promoDiscountRounded = Math.round((promoDiscount || 0) * 100) / 100;
+  const shippingCostRounded = Math.round(totalShippingCost * 100) / 100;
+  const packagingFeeRounded = Math.round(packagingFee * 100) / 100;
+
+  // Canonical Grand Total: Taxable Subtotal + GST Total + Shipping Fee + Packaging Fee - Promo Discount
+  const grandTotal = Math.max(
+    0,
+    Math.round(
+      (taxableSubtotalRounded + gstTotalRounded + shippingCostRounded + packagingFeeRounded - promoDiscountRounded) * 100
+    ) / 100
+  );
+
   const isPincodeValid = Boolean(formData.pincode && formData.pincode.trim().length === 6);
   const isServiceable = Boolean(shippingCalculations && shippingCalculations.serviceable && !shippingError);
   const isCheckoutDisabled = submitting || loadingShipping || !isPincodeValid || !isServiceable;
@@ -1066,8 +1141,9 @@ export default function CheckoutPage() {
             {/* Cart Items List */}
             <div className="flex flex-col gap-4 mb-6">
               {cart.map((item: any) => {
-                const itemPrice = Number(item.sellingPrice || item.price || 0);
+                const itemPrice = Number(item.itemFinalPrice || item.finalPrice || item.sellingPrice || item.price || 0);
                 const itemImg = item.images?.[0] || item.productImage || item.image || 'product_placeholder.png';
+                const lineTotal = Number(item.lineTotal || (itemPrice * item.quantity));
 
                 return (
                   <div key={item._id || item.productId} className="flex items-center gap-3">
@@ -1087,12 +1163,12 @@ export default function CheckoutPage() {
                         {item.name}
                       </div>
                       <div className="text-[0.78rem] text-slate-500">
-                        ₹{itemPrice.toLocaleString('en-IN')} × {item.quantity}
+                        ₹{itemPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {item.quantity}
                       </div>
                     </div>
 
                     <div className="text-xs font-bold text-slate-800">
-                      ₹{(itemPrice * item.quantity).toLocaleString('en-IN')}
+                      ₹{lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
                 );
@@ -1229,45 +1305,49 @@ export default function CheckoutPage() {
             {/* Complete Price Breakdown */}
             <div className="flex flex-col gap-2.5 text-xs text-slate-600 border-t border-slate-100 pt-5 mb-6">
               <div className="flex justify-between">
-                <span>Subtotal</span>
-                <strong className="text-slate-800">₹{cartTotal.toLocaleString('en-IN')}</strong>
+                <span>Taxable Subtotal</span>
+                <strong className="text-slate-800">
+                  ₹{taxableSubtotalRounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
               </div>
 
-              {appliedPromoCode && promoDiscount > 0 && (
+              <div className="flex justify-between">
+                <span>GST Total</span>
+                <strong className="text-slate-800">
+                  ₹{gstTotalRounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+
+              {appliedPromoCode && promoDiscountRounded > 0 && (
                 <div className="flex justify-between text-emerald-600">
                   <span>Promo Discount ({appliedPromoCode})</span>
-                  <strong>-₹{promoDiscount.toLocaleString('en-IN')}</strong>
+                  <strong>
+                    -₹{promoDiscountRounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
                 </div>
               )}
 
               <div className="flex justify-between font-semibold text-slate-800">
                 <span>Delivery Fee</span>
-                <strong className={totalShippingCost === 0 ? 'text-emerald-600' : 'text-slate-800'}>
-                  {totalShippingCost === 0 ? 'FREE' : `₹${totalShippingCost.toLocaleString('en-IN')}`}
+                <strong className={shippingCostRounded === 0 ? 'text-emerald-600' : 'text-slate-800'}>
+                  {shippingCostRounded === 0 ? 'FREE' : `₹${shippingCostRounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </strong>
               </div>
 
-              {packagingFee > 0 && (
+              {packagingFeeRounded > 0 && (
                 <div className="flex justify-between font-semibold text-slate-800">
                   <span>Gift Packaging ({shippingCalculations?.packaging?.selected || 'Special'})</span>
-                  <strong>₹{packagingFee.toLocaleString('en-IN')}</strong>
+                  <strong>
+                    ₹{packagingFeeRounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
                 </div>
               )}
 
-              {shippingCalculations?.breakdown
-                ?.filter((b: any) => b.amount !== 0 && b.key !== 'Subtotal' && b.key !== 'Shipping')
-                .map((b: any, idx: number) => (
-                  <div key={idx} className="flex justify-between text-xs text-slate-600">
-                    <span>{b.label}</span>
-                    <strong className={b.amount < 0 ? 'text-emerald-600' : 'text-slate-800'}>
-                      {b.amount < 0 ? '-' : ''}₹{Math.abs(b.amount).toLocaleString('en-IN')}
-                    </strong>
-                  </div>
-                ))}
-
               <div className="flex justify-between border-t border-slate-100 pt-3 text-lg text-slate-800 font-extrabold">
                 <span>Grand Total</span>
-                <span>₹{grandTotal.toLocaleString('en-IN')}</span>
+                <span className="text-primary font-bold">
+                  ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
 

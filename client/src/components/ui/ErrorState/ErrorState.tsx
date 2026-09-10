@@ -150,8 +150,8 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
     <div
       role="alert"
       aria-live="assertive"
-      className={`w-full flex flex-col items-center justify-center text-center px-4 py-16 sm:py-24 bg-white ${
-        fullPage ? 'min-h-[85vh]' : 'min-h-[400px]'
+      className={`w-full flex flex-col items-center justify-center text-center px-4 py-12 sm:py-20 bg-transparent ${
+        fullPage ? 'min-h-[80vh]' : 'min-h-[360px]'
       }`}
     >
       <div className="max-w-md w-full mx-auto flex flex-col items-center">

@@ -14,6 +14,20 @@ export interface CartItem {
   sellingPrice: number;
   mrp?: number;
   serverCalculatedPrice?: number;
+  offerPrice?: number;
+  taxableAmount?: number;
+  gstRate?: number;
+  gstAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  finalPrice?: number;
+  itemFinalPrice?: number;
+  lineTaxableSubtotal?: number;
+  lineGstTotal?: number;
+  lineTotal?: number;
+  gstMode?: string;
+  taxMode?: string;
 }
 
 export interface PromoValidatePayload {

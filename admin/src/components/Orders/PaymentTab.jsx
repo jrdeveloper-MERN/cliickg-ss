@@ -5,7 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { resolveRazorpayError, getPaymentInstrumentDetails } from '../../utils/razorpayErrorDictionary';
 
 const PAYMENT_STATUS_OPTIONS = [
-  'Pending', 'Initiated', 'Processing', 'Success', 'Failed', 'Cancelled', 'Refunded', 'Partially Refunded'
+  'Pending', 'Initiated', 'Processing', 'Success', 'Failed', 'Cancelled', 'Refunded'
 ];
 
 const PaymentTab = ({ order, onPaymentUpdated }) => {

@@ -286,7 +286,7 @@ model CartItem {
 model Order {
   id                 String       @id
   orderId            String       @unique
-  orderNo            String       @default("AIS2408")
+  orderNo            String       @default("CLIICKG-ORD-000000")
   userId             String?
   user               User?        @relation(fields: [userId], references: [id])
   customerName       String

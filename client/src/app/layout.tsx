@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   title: 'CLIICKG | Construction & Building Materials Marketplace',
   description: 'Shop construction and building materials, hardware, tools, plumbing, electrical, and supplies through CLIICKG.',
   keywords: ['CLIICKG', 'construction materials', 'building materials', 'building supplies', 'cement', 'TMT steel', 'hardware', 'plumbing', 'electrical', 'construction tools'],
+  icons: {
+    icon: '/assets/images/cliickg_favicon.jpeg',
+    shortcut: '/assets/images/cliickg_favicon.jpeg',
+    apple: '/assets/images/cliickg_favicon.jpeg',
+  },
 };
 
 export default function RootLayout({

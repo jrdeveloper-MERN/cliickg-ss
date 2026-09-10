@@ -6,6 +6,7 @@ import { Heart } from 'lucide-react';
 import { useWishlist } from '../../contexts/WishlistContext';
 import getImageUrl from '../../utils/image.utils';
 import { Product } from '../../types/products/product.types';
+import { calculatePricing } from '../../utils/pricing.utils';
 
 export interface ProductCardProps {
   product: Product;
@@ -53,8 +54,51 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   // Active image display based on hover state
   const imageSrc = isHovered && hoverImage ? hoverImage : mainImage;
 
-  const price = Number(product.sellingPrice || product.price || 0);
-  const mrp = Number(product.mrp || (product as any).originalPrice || price);
+  // Authoritatively resolve primary variant & canonical pricing contract
+  const variant =
+    (product.variants && product.variants.length > 0 ? product.variants[0] : null) ||
+    (product.productDetails && product.productDetails.length > 0 ? product.productDetails[0] : null) ||
+    product;
+
+  const activeDetail = {
+    ...product,
+    ...variant,
+    mrp: variant.mrp !== undefined && variant.mrp !== '' ? variant.mrp : product.mrp,
+    offerPrice:
+      variant.offerPrice !== undefined && variant.offerPrice !== ''
+        ? variant.offerPrice
+        : (variant.sellingPrice || variant.price || product.sellingPrice || product.price),
+    enableGst:
+      (variant as any).enableGst !== undefined
+        ? (variant as any).enableGst
+        : (variant as any).attributes?.pricingConfig?.enableGst !== undefined
+          ? (variant as any).attributes.pricingConfig.enableGst
+          : (product as any).enableGst !== undefined
+            ? (product as any).enableGst
+            : true,
+    gstMode:
+      (variant as any).gstMode ||
+      (variant as any).attributes?.pricingConfig?.gstMode ||
+      (product as any).gstMode ||
+      'EXCLUSIVE',
+    gstType:
+      (variant as any).gstType ||
+      (variant as any).attributes?.pricingConfig?.gstType ||
+      (product as any).gstType ||
+      'CGST + SGST',
+    finalGstRate:
+      (variant as any).gst !== undefined && (variant as any).gst !== ''
+        ? (variant as any).gst
+        : (product as any).finalGstRate !== undefined && (product as any).finalGstRate !== ''
+          ? (product as any).finalGstRate
+          : (product as any).gst !== undefined
+            ? (product as any).gst
+            : 0,
+  };
+
+  const pricing = calculatePricing(activeDetail);
+  const price = Number(pricing.finalPayablePrice || pricing.finalPrice || product.sellingPrice || product.price || 0);
+  const mrp = Number(pricing.mrp || variant.mrp || product.mrp || (product as any).originalPrice || price);
   const discountAmount = mrp > price ? mrp - price : 0;
   const discountPercent = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
   const isOutOfStock = (product as any).stock === 0 || product.stockQuantity === 0 || product.inStock === false;
@@ -121,11 +165,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               {price > 0 ? (
                 <>
                   <span className="text-base font-bold text-slate-900">
-                    ₹{price.toLocaleString('en-IN')}
+                    ₹{price.toLocaleString('en-IN', { minimumFractionDigits: price % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}
                   </span>
                   {mrp > price && (
                     <span className="text-xs text-slate-400 line-through">
-                      ₹{mrp.toLocaleString('en-IN')}
+                      ₹{mrp.toLocaleString('en-IN', { minimumFractionDigits: mrp % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}
                     </span>
                   )}
                 </>

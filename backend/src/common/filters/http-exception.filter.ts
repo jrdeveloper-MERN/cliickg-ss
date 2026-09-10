@@ -9,10 +9,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
+    const isMulterError = (exception as any)?.name === 'MulterError';
+
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : isMulterError
+          ? HttpStatus.BAD_REQUEST
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const exceptionResponse: any =
       exception instanceof HttpException ? exception.getResponse() : null;
@@ -39,6 +43,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (isJsonParseError) {
       message = 'Invalid request payload.';
       errors = ['Invalid request payload.'];
+    } else if (isMulterError) {
+      const multerCode = (exception as any)?.code;
+      if (multerCode === 'LIMIT_FILE_SIZE') {
+        message = 'File size exceeds maximum allowed limit of 5MB.';
+      } else {
+        message = (exception as any)?.message || 'File upload error.';
+      }
+      errors = [message];
     } else if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
     } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
@@ -56,9 +68,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = 'Internal server error';
     }
 
+    const errorCode =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? (exceptionResponse as any).code
+        : undefined;
+
     response.status(status).json({
       success: false,
       statusCode: status,
+      ...(errorCode ? { code: errorCode } : {}),
       message,
       errors: errors.length > 0 ? errors : [message],
     });

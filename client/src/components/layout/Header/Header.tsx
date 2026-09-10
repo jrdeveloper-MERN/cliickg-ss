@@ -205,8 +205,8 @@ export const Header: React.FC = () => {
           className="flex items-center justify-center shrink-0 no-underline py-1"
         >
           <img
-            src={getImageUrl('/logo.png')}
-            alt="logo"
+            src={getImageUrl('/logo.jpg')}
+            alt="CLIICKG"
             width="240"
             height="80"
             className="h-14 sm:h-16 lg:h-20 w-auto max-w-[180px] sm:max-w-[220px] lg:max-w-[260px] object-contain transition-all duration-200"
