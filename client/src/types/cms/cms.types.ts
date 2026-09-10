@@ -4,9 +4,14 @@ export interface HeroBanner {
   title?: string;
   subtitle?: string;
   image: string;
+  link?: string;
+  linkType?: string;
+  linkId?: string;
   linkUrl?: string;
+  section?: string;
   buttonText?: string;
   isActive?: boolean;
+  status?: string;
 }
 
 export interface TodayDeal {

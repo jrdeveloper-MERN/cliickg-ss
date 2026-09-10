@@ -6,6 +6,7 @@ import cartService from '../services/cart.service';
 import promotionService from '../services/promotion.service';
 import safeParse from '../utils/safe-parse.utils';
 import { CartItem } from '../types/cart/cart.types';
+import { calculatePricing } from '../utils/pricing.utils';
 
 export const getAvailableStock = (itemOrProd: any): number => {
   if (!itemOrProd) return 0;
@@ -54,20 +55,58 @@ export const normalizeCartItem = (rawItem: any): CartItem => {
   );
 
   const stock = getAvailableStock(rawItem);
+  const variant = rawItem.variant || rawItem.currentVariant;
+
+  const rawMrp = rawItem.mrp ?? variant?.mrp ?? rawItem.originalPrice;
+  const mrp = Number(rawMrp || 0);
+
+  const rawOffer = rawItem.offerPrice ?? variant?.offerPrice;
+  const offerPrice = rawOffer !== undefined && rawOffer !== '' && !isNaN(Number(rawOffer)) ? Number(rawOffer) : undefined;
+
+  const rawTaxable = rawItem.taxableAmount ?? variant?.taxableAmount;
+  const taxableAmount = rawTaxable !== undefined && rawTaxable !== '' && !isNaN(Number(rawTaxable)) ? Number(rawTaxable) : undefined;
+
+  const rawGstRate = rawItem.gstRate ?? rawItem.gst ?? rawItem.finalGstRate ?? variant?.gst;
+  const gstRate = rawGstRate !== undefined && rawGstRate !== '' && !isNaN(Number(rawGstRate)) ? Number(rawGstRate) : undefined;
+
+  const rawGstAmount = rawItem.gstAmount ?? variant?.gstAmount;
+  const gstAmount = rawGstAmount !== undefined && rawGstAmount !== '' && !isNaN(Number(rawGstAmount)) ? Number(rawGstAmount) : undefined;
+
+  const gstMode = rawItem.gstMode || variant?.gstMode || 'EXCLUSIVE';
+  const taxMode = rawItem.taxMode || variant?.taxMode || 'CGST_SGST';
+
+  const calculatedBreakdown = calculatePricing({
+    mrp: mrp > 0 ? mrp : rawItem.price,
+    offerPrice,
+    taxableAmount,
+    gstAmount,
+    sellingPrice: rawItem.sellingPrice || rawItem.price || rawItem.finalPrice || rawItem.itemFinalPrice,
+    gst: gstRate,
+    gstMode,
+    taxMode,
+  });
+
+  const finalOfferPrice = offerPrice !== undefined ? offerPrice : calculatedBreakdown.offerPrice;
+  const finalTaxableAmount = taxableAmount !== undefined ? taxableAmount : calculatedBreakdown.taxableAmount;
+  const finalGstRate = gstRate !== undefined ? gstRate : calculatedBreakdown.finalGstRate;
+  const finalGstAmount = gstAmount !== undefined ? gstAmount : calculatedBreakdown.finalGstAmount;
+
   const finalUnitPrice = Number(
     rawItem.itemFinalPrice ??
     rawItem.finalPrice ??
     rawItem.sellingPrice ??
     rawItem.price ??
     rawItem.serverCalculatedPrice ??
+    calculatedBreakdown.finalPayablePrice ??
     0
   );
   const price = finalUnitPrice;
   const sellingPrice = finalUnitPrice;
-  const mrp = Number(rawItem.mrp || rawItem.price || sellingPrice);
+  const finalMrp = mrp > 0 ? mrp : Number(calculatedBreakdown.mrp || price);
 
   const image = rawItem.image || rawItem.productImage || rawItem.product?.image || (Array.isArray(rawItem.product?.images) ? rawItem.product.images[0] : '') || '';
   const name = rawItem.name || rawItem.product?.name || 'Product';
+  const quantity = Math.max(1, Number(rawItem.quantity || 1));
 
   return {
     id: prodId,
@@ -77,28 +116,28 @@ export const normalizeCartItem = (rawItem: any): CartItem => {
     variantKey: effectiveVariantKey,
     name,
     image,
-    quantity: Math.max(1, Number(rawItem.quantity || 1)),
+    quantity,
     stock,
     selectedSize,
     sku: rawItem.sku || rawItem.variant?.sku || '',
     price,
     sellingPrice,
-    mrp,
+    mrp: finalMrp,
     serverCalculatedPrice: Number(rawItem.serverCalculatedPrice || sellingPrice),
-    offerPrice: rawItem.offerPrice !== undefined ? Number(rawItem.offerPrice) : undefined,
-    taxableAmount: rawItem.taxableAmount !== undefined ? Number(rawItem.taxableAmount) : undefined,
-    gstRate: rawItem.gstRate !== undefined ? Number(rawItem.gstRate) : undefined,
-    gstAmount: rawItem.gstAmount !== undefined ? Number(rawItem.gstAmount) : undefined,
-    cgstAmount: rawItem.cgstAmount !== undefined ? Number(rawItem.cgstAmount) : undefined,
-    sgstAmount: rawItem.sgstAmount !== undefined ? Number(rawItem.sgstAmount) : undefined,
-    igstAmount: rawItem.igstAmount !== undefined ? Number(rawItem.igstAmount) : undefined,
-    finalPrice: rawItem.finalPrice !== undefined ? Number(rawItem.finalPrice) : finalUnitPrice,
-    itemFinalPrice: rawItem.itemFinalPrice !== undefined ? Number(rawItem.itemFinalPrice) : finalUnitPrice,
-    lineTaxableSubtotal: rawItem.lineTaxableSubtotal !== undefined ? Number(rawItem.lineTaxableSubtotal) : undefined,
-    lineGstTotal: rawItem.lineGstTotal !== undefined ? Number(rawItem.lineGstTotal) : undefined,
-    lineTotal: rawItem.lineTotal !== undefined ? Number(rawItem.lineTotal) : undefined,
-    gstMode: rawItem.gstMode,
-    taxMode: rawItem.taxMode,
+    offerPrice: finalOfferPrice,
+    taxableAmount: finalTaxableAmount,
+    gstRate: finalGstRate,
+    gstAmount: finalGstAmount,
+    cgstAmount: rawItem.cgstAmount !== undefined ? Number(rawItem.cgstAmount) : calculatedBreakdown.cgstAmount,
+    sgstAmount: rawItem.sgstAmount !== undefined ? Number(rawItem.sgstAmount) : calculatedBreakdown.sgstAmount,
+    igstAmount: rawItem.igstAmount !== undefined ? Number(rawItem.igstAmount) : calculatedBreakdown.igstAmount,
+    finalPrice: finalUnitPrice,
+    itemFinalPrice: finalUnitPrice,
+    lineTaxableSubtotal: Number((finalTaxableAmount * quantity).toFixed(2)),
+    lineGstTotal: Number((finalGstAmount * quantity).toFixed(2)),
+    lineTotal: Number((finalUnitPrice * quantity).toFixed(2)),
+    gstMode,
+    taxMode,
   };
 };
 

@@ -2,13 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import cmsService from '../../../services/cms.service';
 import getImageUrl from '../../../utils/image.utils';
+import { computeCmsTargetUrl } from '../../../utils/cms.utils';
 import { ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import { TodayDeal, TodayDealBanner } from '../../../types/cms/cms.types';
 import { ProductCardSkeleton, SkeletonRect } from '../../ui/Skeleton/Skeleton';
 
 export const TodayDeals: React.FC = () => {
+  const router = useRouter();
   const [deals, setDeals] = useState<TodayDeal[]>([]);
   const [banners, setBanners] = useState<TodayDealBanner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -76,35 +79,42 @@ export const TodayDeals: React.FC = () => {
 
   return (
     <div className="w-full py-8">
-      {banners.length > 0 && (
-        <div className="relative w-full rounded-xl overflow-hidden mb-12 bg-slate-900">
-          <img
-            src={getImageUrl(banners[currentBannerIndex]?.image)}
-            alt="Today's Deal Banner"
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = '/uploads/fallbackimg.png';
-            }}
-            className="w-full h-auto min-h-[120px] xs:min-h-[160px] sm:min-h-[280px] max-h-[240px] xs:max-h-[320px] sm:max-h-[560px] object-cover object-center block"
-          />
-          {banners.length > 1 && (
-            <>
-              <button
-                onClick={() => setCurrentBannerIndex((prev) => (prev === 0 ? banners.length - 1 : prev - 1))}
-                className="absolute top-1/2 left-5 -translate-y-1/2 bg-white/80 hover:bg-white border-none rounded-full w-10 h-10 flex items-center justify-center cursor-pointer shadow-md z-10 text-slate-800 transition-colors"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <button
-                onClick={() => setCurrentBannerIndex((prev) => (prev + 1) % banners.length)}
-                className="absolute top-1/2 right-5 -translate-y-1/2 bg-white/80 hover:bg-white border-none rounded-full w-10 h-10 flex items-center justify-center cursor-pointer shadow-md z-10 text-slate-800 transition-colors"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {banners.length > 0 && (() => {
+        const currentBanner = banners[currentBannerIndex];
+        const bannerTargetUrl = computeCmsTargetUrl(currentBanner);
+        return (
+          <div
+            onClick={() => bannerTargetUrl && router.push(bannerTargetUrl)}
+            className={`relative w-full rounded-xl overflow-hidden mb-12 bg-slate-900 ${bannerTargetUrl ? 'cursor-pointer' : ''}`}
+          >
+            <img
+              src={getImageUrl(currentBanner?.image)}
+              alt="Today's Deal Banner"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = '/uploads/fallbackimg.png';
+              }}
+              className="w-full h-auto min-h-[120px] xs:min-h-[160px] sm:min-h-[280px] max-h-[240px] xs:max-h-[320px] sm:max-h-[560px] object-cover object-center block"
+            />
+            {banners.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCurrentBannerIndex((prev) => (prev === 0 ? banners.length - 1 : prev - 1)); }}
+                  className="absolute top-1/2 left-5 -translate-y-1/2 bg-white/80 hover:bg-white border-none rounded-full w-10 h-10 flex items-center justify-center cursor-pointer shadow-md z-10 text-slate-800 transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCurrentBannerIndex((prev) => (prev + 1) % banners.length); }}
+                  className="absolute top-1/2 right-5 -translate-y-1/2 bg-white/80 hover:bg-white border-none rounded-full w-10 h-10 flex items-center justify-center cursor-pointer shadow-md z-10 text-slate-800 transition-colors"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {deals.length > 0 && (
         <div className="mt-12">
@@ -132,7 +142,12 @@ export const TodayDeals: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {deals.map((deal: any) => {
-              const linkUrl = deal.type === 'Product' && deal.linkId ? `/product/${deal.linkId}` : '/today-deals';
+              const linkUrl = computeCmsTargetUrl({
+                linkUrl: deal.linkUrl,
+                linkType: deal.linkType || deal.type || deal.selectType,
+                linkId: deal.linkId || deal.name || (deal.productIds && deal.productIds[0]),
+                id: deal.linkId || deal.name || (deal.productIds && deal.productIds[0]),
+              });
               return (
                 <Link
                   key={deal.id || deal._id}

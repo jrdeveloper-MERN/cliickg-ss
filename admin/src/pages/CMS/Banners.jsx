@@ -4,7 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
 import Pagination from '../../components/Common/Pagination';
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
-import { validateImageFile, IMAGE_SPECS, trimString, validateDropdown } from '../../utils/validation';
+import { validateImageFile, IMAGE_SPECS } from '../../utils/validation';
 
 const Banners = () => {
   const [banners, setBanners] = useState([]);
@@ -13,10 +13,7 @@ const Banners = () => {
   const limit = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
-  const [section, setSection] = useState('Hero Banner');
-  const [linkType, setLinkType] = useState('Category');
+  const [linkType, setLinkType] = useState('');
   const [linkId, setLinkId] = useState('');
   const [status, setStatus] = useState('Active');
   const [imageFile, setImageFile] = useState(null);
@@ -97,7 +94,7 @@ const Banners = () => {
   const computeLinkUrl = (type, targetId) => {
     if (!targetId) return '/shop';
     if (type === 'Product') return `/product/${targetId}`;
-    if (type === 'Category') return `/category/${targetId}`;
+    if (type === 'Category') return `/shop?category=${targetId}`;
     if (type === 'MainCategory') return `/shop?mainCategory=${targetId}`;
     if (type === 'SubCategory') return `/shop?subCategory=${targetId}`;
     return '/shop';
@@ -130,13 +127,11 @@ const Banners = () => {
       newErrors.image = 'Banner image is required (PNG/JPG/JPEG, 2400×800 px, Max 500 KB).';
     }
 
-    const sectionErr = validateDropdown(section, 'Banner Section Placement');
-    if (sectionErr) newErrors.section = sectionErr;
+    if (!linkType) {
+      newErrors.linkType = 'Please select a Link Type';
+    }
 
-    const linkTypeErr = validateDropdown(linkType, 'Link Type Target');
-    if (linkTypeErr) newErrors.linkType = linkTypeErr;
-
-    if (!linkId) {
+    if (linkType && !linkId) {
       newErrors.linkId = `Please select a target ${linkType}`;
     }
 
@@ -147,15 +142,10 @@ const Banners = () => {
       return;
     }
 
-    const trimmedTitle = trimString(title);
-    const trimmedSubtitle = trimString(subtitle);
     const calculatedUrl = computeLinkUrl(linkType, linkId);
 
     const formData = new FormData();
     formData.append('image', imageFile);
-    formData.append('title', trimmedTitle);
-    formData.append('subtitle', trimmedSubtitle);
-    formData.append('section', section);
     formData.append('linkType', linkType);
     formData.append('linkId', linkId);
     formData.append('linkUrl', calculatedUrl);
@@ -170,8 +160,6 @@ const Banners = () => {
       setIsModalOpen(false);
       setImageFile(null);
       setPreview('');
-      setTitle('');
-      setSubtitle('');
       setLinkId('');
       setErrors({});
     } catch (err) {
@@ -262,22 +250,6 @@ const Banners = () => {
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setErrors({}); }} title="Add Banner">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-          {/* Banner Section Placement */}
-          <div>
-            <label className="form-label">Banner Section Placement *</label>
-            <select className="form-control text-xs" value={section} onChange={(e) => setSection(e.target.value)} required>
-              <option value="Hero Banner">Hero Banner (Main Top Slider)</option>
-              <option value="Special Offers Banner">Special Offers Banner</option>
-              <option value="Middle Banner">Middle Promo Banner</option>
-              <option value="Product Banner">Product Section Banner</option>
-            </select>
-            {errors.section && (
-              <span className="text-rose-500 text-xs mt-1 flex items-center gap-1">
-                <AlertCircle size={12} /> {errors.section}
-              </span>
-            )}
-          </div>
-
           {/* Banner Image Upload */}
           <div>
             <label className="form-label">Upload Banner Image * (2400 × 800 px, Max 500 KB, PNG/JPG/JPEG)</label>
@@ -297,30 +269,6 @@ const Banners = () => {
             )}
           </div>
 
-          {/* Banner Title & Subtitle */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label">Banner Headline Title</label>
-              <input
-                type="text"
-                placeholder="e.g. Product Name"
-                className="form-control text-xs"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="form-label">Subtitle Text</label>
-              <input
-                type="text"
-                placeholder="e.g. Special offer on construction materials"
-                className="form-control text-xs"
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-              />
-            </div>
-          </div>
-
           {/* Link Type Selector */}
           <div>
             <label className="form-label">Link Type Target *</label>
@@ -332,51 +280,69 @@ const Banners = () => {
                 setLinkId('');
               }}
             >
-              <option value="MainCategory">MainCategory</option>
+              <option value="">Select Link Type</option>
+              <option value="MainCategory">Main Category</option>
               <option value="Category">Category</option>
-              <option value="SubCategory">SubCategory</option>
+              <option value="SubCategory">Sub Category</option>
               <option value="Product">Product</option>
             </select>
+            {errors.linkType && (
+              <span className="text-rose-500 text-xs mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.linkType}
+              </span>
+            )}
           </div>
 
           {/* Target Dropdown based on Link Type */}
           <div>
-            <label className="form-label">Select Target {linkType} *</label>
+            <label className="form-label">Select Target {linkType || 'Type'} *</label>
+            {!linkType && (
+              <select className="form-control text-xs" disabled>
+                <option>Select Link Type first</option>
+              </select>
+            )}
+
             {linkType === 'MainCategory' && (
               <select className="form-control text-xs" value={linkId} onChange={(e) => setLinkId(e.target.value)}>
-                <option value="">-- Select Main Category --</option>
-                {safeMainCategories.map(mc => (
-                  <option key={mc._id} value={mc._id}>{mc.name || mc.title}</option>
-                ))}
+                <option value="">Select Main Category</option>
+                {safeMainCategories.map(mc => {
+                  const targetId = mc.id || mc._id;
+                  return <option key={targetId} value={targetId}>{mc.name || mc.title}</option>;
+                })}
               </select>
             )}
 
             {linkType === 'Category' && (
               <select className="form-control text-xs" value={linkId} onChange={(e) => setLinkId(e.target.value)}>
-                <option value="">-- Select Category --</option>
-                {safeCategories.map(c => (
-                  <option key={c._id} value={c._id}>{c.name || c.title}</option>
-                ))}
+                <option value="">Select Category</option>
+                {safeCategories.map(c => {
+                  const targetId = c.id || c._id;
+                  return <option key={targetId} value={targetId}>{c.name || c.title}</option>;
+                })}
               </select>
             )}
 
             {linkType === 'SubCategory' && (
               <select className="form-control text-xs" value={linkId} onChange={(e) => setLinkId(e.target.value)}>
-                <option value="">-- Select Sub Category --</option>
-                {safeSubCategories.map(sc => (
-                  <option key={sc._id} value={sc._id}>{sc.name || sc.title}</option>
-                ))}
+                <option value="">Select Sub Category</option>
+                {safeSubCategories.map(sc => {
+                  const targetId = sc.id || sc._id;
+                  return <option key={targetId} value={targetId}>{sc.name || sc.title}</option>;
+                })}
               </select>
             )}
 
             {linkType === 'Product' && (
               <select className="form-control text-xs" value={linkId} onChange={(e) => setLinkId(e.target.value)}>
-                <option value="">-- Select Product --</option>
-                {safeProducts.map(p => (
-                  <option key={p._id} value={p._id}>
-                    {p.name || p.title} (₹{p.sellingPrice || p.price})
-                  </option>
-                ))}
+                <option value="">Select Product</option>
+                {safeProducts.map(p => {
+                  const targetId = p.id || p._id;
+                  return (
+                    <option key={targetId} value={targetId}>
+                      {p.name || p.title} (₹{p.sellingPrice || p.price})
+                    </option>
+                  );
+                })}
               </select>
             )}
             {errors.linkId && (

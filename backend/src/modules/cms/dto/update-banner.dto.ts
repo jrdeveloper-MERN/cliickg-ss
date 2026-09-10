@@ -13,6 +13,18 @@ export class UpdateBannerDto {
   @IsOptional()
   link?: string;
 
+  @IsString()
+  @IsOptional()
+  linkType?: string;
+
+  @IsString()
+  @IsOptional()
+  linkId?: string;
+
+  @IsString()
+  @IsOptional()
+  linkUrl?: string;
+
   @IsNumber()
   @IsOptional()
   position?: number;
@@ -21,3 +33,4 @@ export class UpdateBannerDto {
   @IsOptional()
   status?: string;
 }
+

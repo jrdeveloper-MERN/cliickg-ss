@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, SlidersHorizontal, X, RotateCcw } from 'lucide-react';
 import ProductGrid from '../../components/products/ProductGrid';
 import productService from '../../services/product.service';
 import categoryService from '../../services/category.service';
 import { Product } from '../../types/products/product.types';
-import { Category, AttributeCaption } from '../../types/categories/category.types';
+import { MainCategory, Category, SubCategory, AttributeCaption } from '../../types/categories/category.types';
 import ErrorState from '../../components/ui/ErrorState/ErrorState';
 import { parseAppError, isNetworkOrServerDown, AppError } from '../../utils/error-handler.utils';
 import { calculatePricing } from '../../utils/pricing.utils';
@@ -195,16 +195,21 @@ const TrueDualRangeSlider: React.FC<{
 
 function ShopContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const queryCategory =
-    searchParams.get('category') || searchParams.get('mainCategory') || searchParams.get('subCategory') || '';
+  const paramCategory = searchParams.get('category') || '';
+  const paramMainCategory = searchParams.get('mainCategory') || '';
+  const paramSubCategory = searchParams.get('subCategory') || '';
+  const queryCategory = paramCategory || paramMainCategory || paramSubCategory || '';
   const searchQuery = searchParams.get('q') || searchParams.get('search') || '';
   const paramMinPrice = searchParams.get('minPrice');
   const paramMaxPrice = searchParams.get('maxPrice');
   const priceSort = searchParams.get('sort') || '';
 
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [attributeCaptions, setAttributeCaptions] = useState<AttributeCaption[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<AppError | null>(null);
@@ -234,6 +239,95 @@ function ShopContent() {
   const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({});
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
+  const isIdString = useCallback((val: string) => {
+    if (!val) return false;
+    return (
+      /^[0-9a-fA-F]{24}$/.test(val) ||
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val)
+    );
+  }, []);
+
+  const displayCategoryName = useMemo(() => {
+    if (!selectedCategory && !paramSubCategory && !paramCategory && !paramMainCategory) return '';
+
+    // 1. Direct parameter lookup by specific category level
+    if (paramSubCategory) {
+      const matchSub = subCategories.find(
+        (s) => String(s.id || s._id) === paramSubCategory || s.name === paramSubCategory
+      );
+      if (matchSub?.name) return matchSub.name;
+    }
+
+    if (paramCategory) {
+      const matchCat = categories.find(
+        (c) => String(c.id || c._id) === paramCategory || c.name === paramCategory
+      );
+      if (matchCat?.name) return matchCat.name;
+    }
+
+    if (paramMainCategory) {
+      const matchMain = mainCategories.find(
+        (m) => String(m.id || m._id) === paramMainCategory || m.name === paramMainCategory
+      );
+      if (matchMain?.name) return matchMain.name;
+    }
+
+    // 2. Lookup across all category metadata lists
+    const target = selectedCategory || paramSubCategory || paramCategory || paramMainCategory;
+    if (!target) return '';
+
+    const matchSub = subCategories.find(
+      (s) => String(s.id || s._id) === target || s.name === target
+    );
+    if (matchSub?.name) return matchSub.name;
+
+    const matchCat = categories.find(
+      (c) => String(c.id || c._id) === target || c.name === target
+    );
+    if (matchCat?.name) return matchCat.name;
+
+    const matchMain = mainCategories.find(
+      (m) => String(m.id || m._id) === target || m.name === target
+    );
+    if (matchMain?.name) return matchMain.name;
+
+    // 3. Fallback lookup via loaded product attributes
+    const matchProd = allProducts.find(
+      (p: any) =>
+        String(p.subCategoryId?.id || p.subCategoryId?._id || p.subCategoryId) === target ||
+        String(p.categoryId?.id || p.categoryId?._id || p.categoryId) === target ||
+        String(p.mainCategoryId?.id || p.mainCategoryId?._id || p.mainCategoryId) === target
+    );
+    if (matchProd) {
+      if (matchProd.subCategoryName) return matchProd.subCategoryName;
+      if (matchProd.categoryName) return matchProd.categoryName;
+      if (matchProd.mainCategoryName) return matchProd.mainCategoryName;
+      if (typeof matchProd.subCategoryId === 'object' && (matchProd.subCategoryId as any)?.name)
+        return (matchProd.subCategoryId as any).name;
+      if (typeof matchProd.categoryId === 'object' && (matchProd.categoryId as any)?.name)
+        return (matchProd.categoryId as any).name;
+      if (typeof matchProd.mainCategoryId === 'object' && (matchProd.mainCategoryId as any)?.name)
+        return (matchProd.mainCategoryId as any).name;
+    }
+
+    // 4. Safe Return — NEVER return raw ID string to customer
+    if (!isIdString(target)) {
+      return target;
+    }
+
+    return '';
+  }, [
+    selectedCategory,
+    paramSubCategory,
+    paramCategory,
+    paramMainCategory,
+    subCategories,
+    categories,
+    mainCategories,
+    allProducts,
+    isIdString,
+  ]);
+
   useEffect(() => {
     fetchMetadata();
   }, []);
@@ -244,11 +338,15 @@ function ShopContent() {
 
   const fetchMetadata = async () => {
     try {
-      const [catList, captionList] = await Promise.all([
-        categoryService.getCategories(),
-        categoryService.getAttributeCaptions(),
+      const [mainCatList, catList, subCatList, captionList] = await Promise.all([
+        categoryService.getMainCategories().catch(() => []),
+        categoryService.getCategories().catch(() => []),
+        categoryService.getSubCategories().catch(() => []),
+        categoryService.getAttributeCaptions().catch(() => []),
       ]);
+      setMainCategories(mainCatList || []);
       setCategories((catList || []).filter((c: any) => c.status === 'Active' || c.isActive !== false));
+      setSubCategories(subCatList || []);
       setAttributeCaptions((captionList || []).filter((c: any) => c.status === 'Active' || c.isActive !== false));
     } catch (err) {
       console.error('Error fetching filter metadata:', err);
@@ -314,7 +412,9 @@ function ShopContent() {
     setPageError(null);
     try {
       const res = await productService.getProducts({
-        category: selectedCategory || undefined,
+        category: paramCategory || undefined,
+        mainCategory: paramMainCategory || undefined,
+        subCategory: paramSubCategory || undefined,
         search: searchQuery || undefined,
         limit: 200,
       });
@@ -347,7 +447,15 @@ function ShopContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, searchQuery, paramMinPrice, paramMaxPrice, getProductPrice]);
+  }, [
+    paramCategory,
+    paramMainCategory,
+    paramSubCategory,
+    searchQuery,
+    paramMinPrice,
+    paramMaxPrice,
+    getProductPrice,
+  ]);
 
   useEffect(() => {
     fetchProducts();
@@ -359,11 +467,22 @@ function ShopContent() {
       newCategory: string,
       newMin: number,
       newMax: number,
-      newSort: string
+      newSort: string,
+      clearSearch: boolean = false
     ) => {
       const params = new URLSearchParams();
-      if (searchQuery) params.set('q', searchQuery);
-      if (newCategory) params.set('category', newCategory);
+      if (!clearSearch && searchQuery) params.set('q', searchQuery);
+      if (newCategory) {
+        if (paramSubCategory && (newCategory === paramSubCategory || newCategory === queryCategory)) {
+          params.set('subCategory', paramSubCategory);
+        } else if (paramMainCategory && (newCategory === paramMainCategory || newCategory === queryCategory)) {
+          params.set('mainCategory', paramMainCategory);
+        } else if (paramCategory && (newCategory === paramCategory || newCategory === queryCategory)) {
+          params.set('category', paramCategory);
+        } else {
+          params.set('category', newCategory);
+        }
+      }
       if (newMin > dbMinPrice) params.set('minPrice', String(newMin));
       if (newMax < dbMaxPrice) params.set('maxPrice', String(newMax));
       if (newSort) params.set('sort', newSort);
@@ -376,11 +495,9 @@ function ShopContent() {
 
       const queryStr = params.toString();
       const newPath = queryStr ? `/shop?${queryStr}` : '/shop';
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', newPath);
-      }
+      router.replace(newPath, { scroll: false });
     },
-    [searchQuery, dbMinPrice, dbMaxPrice]
+    [router, searchQuery, paramCategory, paramMainCategory, paramSubCategory, queryCategory, dbMinPrice, dbMaxPrice]
   );
 
   useEffect(() => {
@@ -623,7 +740,7 @@ function ShopContent() {
     setMaxPrice(dbMaxPrice);
     setSliderMin(dbMinPrice);
     setSliderMax(dbMaxPrice);
-    updateUrlParams({}, '', dbMinPrice, dbMaxPrice, priceSort);
+    updateUrlParams({}, '', dbMinPrice, dbMaxPrice, priceSort, true);
   };
 
   const activeFilterCount = useMemo(() => {
@@ -632,9 +749,10 @@ function ShopContent() {
       count += vals.length;
     });
     if (selectedCategory) count++;
+    if (searchQuery) count++;
     if (sliderMin > dbMinPrice || sliderMax < dbMaxPrice) count++;
     return count;
-  }, [selectedFilters, selectedCategory, sliderMin, sliderMax, dbMinPrice, dbMaxPrice]);
+  }, [selectedFilters, selectedCategory, searchQuery, sliderMin, sliderMax, dbMinPrice, dbMaxPrice]);
 
   const renderFilterSidebar = () => (
     <div className="flex flex-col gap-5">
@@ -777,26 +895,30 @@ function ShopContent() {
 
           {(openAccordions['category'] ?? Boolean(selectedCategory)) && (
             <div className="flex flex-col gap-2 text-xs mt-3 max-h-44 overflow-y-auto">
-              {categories.map((cat) => (
-                <label
-                  key={cat.id || cat._id}
-                  className={`flex items-center gap-2 cursor-pointer ${
-                    selectedCategory === cat.name ? 'text-primary font-semibold' : 'text-slate-600 font-normal'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedCategory === cat.name}
-                    onChange={() => {
-                      const nextCat = selectedCategory === cat.name ? '' : cat.name;
-                      setSelectedCategory(nextCat);
-                      updateUrlParams(selectedFilters, nextCat, minPrice, maxPrice, priceSort);
-                    }}
-                    className="accent-primary w-4 h-4"
-                  />
-                  {cat.name}
-                </label>
-              ))}
+              {categories.map((cat) => {
+                const catId = String(cat.id || cat._id);
+                const isSelected = selectedCategory === catId || selectedCategory === cat.name;
+                return (
+                  <label
+                    key={catId}
+                    className={`flex items-center gap-2 cursor-pointer ${
+                      isSelected ? 'text-primary font-semibold' : 'text-slate-600 font-normal'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        const nextCat = isSelected ? '' : catId;
+                        setSelectedCategory(nextCat);
+                        updateUrlParams(selectedFilters, nextCat, minPrice, maxPrice, priceSort);
+                      }}
+                      className="accent-primary w-4 h-4"
+                    />
+                    {cat.name}
+                  </label>
+                );
+              })}
             </div>
           )}
         </div>
@@ -838,7 +960,7 @@ function ShopContent() {
           <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-4 flex-wrap gap-4">
             <div>
               <h2 className="font-serif text-3xl font-normal text-slate-800 m-0">
-                {searchQuery ? `Search Results: "${searchQuery}"` : selectedCategory ? selectedCategory : 'All Products'}
+                {searchQuery ? `Search Results: "${searchQuery}"` : displayCategoryName ? displayCategoryName : 'All Products'}
               </h2>
               <span className="text-xs text-slate-500">
                 Showing {filteredProducts.length} items
@@ -871,12 +993,28 @@ function ShopContent() {
               {/* Category Pill */}
               {selectedCategory && (
                 <div className="inline-flex items-center gap-1.5 bg-primary-light text-primary border border-primary-border py-1 px-2.5 rounded-full text-xs font-semibold">
-                  <span>Category: {selectedCategory}</span>
+                  <span>Category: {displayCategoryName || 'Selected Category'}</span>
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedCategory('');
                       updateUrlParams(selectedFilters, '', minPrice, maxPrice, priceSort);
+                    }}
+                    className="bg-transparent border-none text-primary hover:text-secondary cursor-pointer flex items-center p-0 ml-0.5"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+
+              {/* Search Pill */}
+              {searchQuery && (
+                <div className="inline-flex items-center gap-1.5 bg-primary-light text-primary border border-primary-border py-1 px-2.5 rounded-full text-xs font-semibold">
+                  <span>Search: "{searchQuery}"</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateUrlParams(selectedFilters, selectedCategory, minPrice, maxPrice, priceSort, true);
                     }}
                     className="bg-transparent border-none text-primary hover:text-secondary cursor-pointer flex items-center p-0 ml-0.5"
                   >

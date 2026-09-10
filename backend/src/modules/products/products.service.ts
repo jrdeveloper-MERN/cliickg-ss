@@ -113,8 +113,10 @@ export class ProductsService {
         OR: [
           { mainCategoryId: catTerm },
           { categoryId: catTerm },
+          { subCategoryId: catTerm },
           { mainCategory: { name: { equals: catTerm, mode: 'insensitive' } } },
           { category: { name: { equals: catTerm, mode: 'insensitive' } } },
+          { subCategory: { name: { equals: catTerm, mode: 'insensitive' } } },
         ],
       };
       if (where.OR) {

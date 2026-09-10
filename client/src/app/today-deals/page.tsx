@@ -8,6 +8,7 @@ import cmsService from '../../services/cms.service';
 import categoryService from '../../services/category.service';
 import productService from '../../services/product.service';
 import getImageUrl from '../../utils/image.utils';
+import { computeCmsTargetUrl } from '../../utils/cms.utils';
 import Carousel from '../../components/home/Carousel/Carousel';
 import ProductGrid from '../../components/products/ProductGrid';
 import ProductCard from '../../components/products/ProductCard';
@@ -236,12 +237,15 @@ export default function TodayDealsPage() {
           const mainCatObj = mainCategories.find((c) => String(c.id || c._id) === String(item.name));
           const imageSrc = item.image || (mainCatObj ? mainCatObj.image : '');
           const title = item.title || (mainCatObj ? mainCatObj.name : '');
-          return buildCard(imageSrc, title, '/shop', idx);
+          const targetUrl = computeCmsTargetUrl({ type: 'MainCategory', id: item.name || (mainCatObj ? (mainCatObj.id || mainCatObj._id) : '') });
+          return buildCard(imageSrc, title, targetUrl, idx);
         };
       } else {
         items = mainCategories;
-        renderCard = (item: any, idx: number) =>
-          buildCard(item.image, item.name, '/shop', item.id || item._id || idx);
+        renderCard = (item: any, idx: number) => {
+          const targetUrl = computeCmsTargetUrl({ type: 'MainCategory', id: item.id || item._id });
+          return buildCard(item.image, item.name, targetUrl, item.id || item._id || idx);
+        };
       }
     } else if (type === 'category') {
       if (section.items && section.items.length > 0) {
@@ -250,12 +254,15 @@ export default function TodayDealsPage() {
           const catObj = categories.find((c) => String(c.id || c._id) === String(item.name));
           const imageSrc = item.image || (catObj ? catObj.image : '');
           const title = item.title || (catObj ? catObj.name : '');
-          return buildCard(imageSrc, title, '/shop', idx);
+          const targetUrl = computeCmsTargetUrl({ type: 'Category', id: item.name || (catObj ? (catObj.id || catObj._id) : '') });
+          return buildCard(imageSrc, title, targetUrl, idx);
         };
       } else {
         items = categories;
-        renderCard = (item: any, idx: number) =>
-          buildCard(item.image, item.name, '/shop', item.id || item._id || idx);
+        renderCard = (item: any, idx: number) => {
+          const targetUrl = computeCmsTargetUrl({ type: 'Category', id: item.id || item._id });
+          return buildCard(item.image, item.name, targetUrl, item.id || item._id || idx);
+        };
       }
     } else if (type === 'sub_category') {
       if (section.items && section.items.length > 0) {
@@ -264,12 +271,15 @@ export default function TodayDealsPage() {
           const subObj = subCategories.find((c) => String(c.id || c._id) === String(item.name));
           const imageSrc = item.image || (subObj ? subObj.image : '');
           const title = item.title || (subObj ? subObj.name : '');
-          return buildCard(imageSrc, title, '/shop', idx);
+          const targetUrl = computeCmsTargetUrl({ type: 'SubCategory', id: item.name || (subObj ? (subObj.id || subObj._id) : '') });
+          return buildCard(imageSrc, title, targetUrl, idx);
         };
       } else {
         items = subCategories;
-        renderCard = (item: any, idx: number) =>
-          buildCard(item.image, item.name, '/shop', item.id || item._id || idx);
+        renderCard = (item: any, idx: number) => {
+          const targetUrl = computeCmsTargetUrl({ type: 'SubCategory', id: item.id || item._id });
+          return buildCard(item.image, item.name, targetUrl, item.id || item._id || idx);
+        };
       }
     } else if (type === 'product_price' || type === 'products_grid') {
       if (type === 'products_grid' && section.items && section.items.length > 0) {

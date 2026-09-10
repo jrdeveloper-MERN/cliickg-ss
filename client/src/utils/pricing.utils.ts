@@ -5,7 +5,11 @@
 
 export function calculatePricing(detail: any = {}): any {
   const mrp = parseFloat(detail.mrp || detail.originalPrice) || 0;
-  const offerPrice = parseFloat(detail.offerPrice || detail.sellingPrice || detail.price) || 0;
+
+  const explicitTaxable = detail.taxableAmount !== undefined && detail.taxableAmount !== '' && !isNaN(Number(detail.taxableAmount)) ? parseFloat(detail.taxableAmount) : null;
+  const explicitOffer = detail.offerPrice !== undefined && detail.offerPrice !== '' && !isNaN(Number(detail.offerPrice)) ? parseFloat(detail.offerPrice) : null;
+  const explicitGstAmount = detail.gstAmount !== undefined && detail.gstAmount !== '' && !isNaN(Number(detail.gstAmount)) ? parseFloat(detail.gstAmount) : null;
+  const rawSelling = detail.sellingPrice !== undefined && detail.sellingPrice !== '' ? parseFloat(detail.sellingPrice) : (detail.price !== undefined && detail.price !== '' ? parseFloat(detail.price) : 0);
 
   const enableGst = detail.enableGst !== undefined
     ? Boolean(detail.enableGst)
@@ -22,10 +26,28 @@ export function calculatePricing(detail: any = {}): any {
   const parsedGst = parseFloat(String(rawGst));
   const finalGstRate = isNaN(parsedGst) || parsedGst < 0 ? 0 : parsedGst;
 
-  const effectivePrice = offerPrice > 0 ? offerPrice : (mrp > 0 ? mrp : 0);
-
   const rawGstMode = detail.gstMode || detail.attributes?.pricingConfig?.gstMode || 'EXCLUSIVE';
   const gstMode = String(rawGstMode).toUpperCase() === 'INCLUSIVE' ? 'INCLUSIVE' : 'EXCLUSIVE';
+
+  let offerPrice = 0;
+  if (explicitTaxable !== null && explicitTaxable > 0) {
+    offerPrice = explicitTaxable;
+  } else if (explicitOffer !== null && explicitOffer > 0) {
+    offerPrice = explicitOffer;
+  } else if (explicitGstAmount !== null && explicitGstAmount > 0 && rawSelling > explicitGstAmount) {
+    offerPrice = rawSelling - explicitGstAmount;
+  } else if (mrp > 0 && (rawSelling === 0 || rawSelling >= mrp)) {
+    offerPrice = mrp;
+  } else if (rawSelling > 0) {
+    if (enableGst && finalGstRate > 0 && gstMode === 'EXCLUSIVE') {
+      const divisor = 1 + (finalGstRate / 100);
+      offerPrice = parseFloat((rawSelling / divisor).toFixed(2));
+    } else {
+      offerPrice = rawSelling;
+    }
+  }
+
+  const effectivePrice = offerPrice > 0 ? offerPrice : (mrp > 0 ? mrp : 0);
 
   const rawTaxMode = detail.taxMode || detail.attributes?.pricingConfig?.taxMode || detail.gstType || detail.attributes?.pricingConfig?.gstType || 'CGST_SGST';
   const taxMode = (rawTaxMode === 'IGST' || rawTaxMode === 'igst') ? 'IGST' : 'CGST_SGST';
@@ -47,7 +69,11 @@ export function calculatePricing(detail: any = {}): any {
       finalPayablePrice = effectivePrice;
     } else {
       taxableAmount = effectivePrice;
-      finalGstAmount = parseFloat(((effectivePrice * finalGstRate) / 100).toFixed(2));
+      if (explicitGstAmount !== null && explicitGstAmount > 0 && explicitTaxable !== null) {
+        finalGstAmount = explicitGstAmount;
+      } else {
+        finalGstAmount = parseFloat(((effectivePrice * finalGstRate) / 100).toFixed(2));
+      }
       finalPayablePrice = parseFloat((effectivePrice + finalGstAmount).toFixed(2));
     }
 

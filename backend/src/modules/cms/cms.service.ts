@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
 import { CreateBannerDto } from './dto/create-banner.dto';
@@ -38,6 +38,63 @@ export class CmsService {
 
   constructor(private readonly prisma: PrismaService) { }
 
+  private static readonly VALID_LINK_TYPES = ['MainCategory', 'Category', 'SubCategory', 'Product'];
+
+  private computeBannerLinkUrl(linkType: string, linkId: string): string {
+    if (!linkType || !linkId) return '/shop';
+    switch (linkType) {
+      case 'MainCategory': return `/shop?mainCategory=${encodeURIComponent(linkId)}`;
+      case 'Category': return `/shop?category=${encodeURIComponent(linkId)}`;
+      case 'SubCategory': return `/shop?subCategory=${encodeURIComponent(linkId)}`;
+      case 'Product': return `/product/${encodeURIComponent(linkId)}`;
+      default: return '/shop';
+    }
+  }
+
+  private async validateBannerTarget(linkType?: string, linkId?: string): Promise<void> {
+    // Allow empty target (non-clickable banner)
+    if (!linkType && !linkId) return;
+
+    if (linkType && !linkId) {
+      throw new BadRequestException(`linkId is required when linkType is '${linkType}'`);
+    }
+    if (linkId && !linkType) {
+      throw new BadRequestException('linkType is required when linkId is provided');
+    }
+
+    if (!CmsService.VALID_LINK_TYPES.includes(linkType!)) {
+      throw new BadRequestException(
+        `Invalid linkType '${linkType}'. Supported: ${CmsService.VALID_LINK_TYPES.join(', ')}`
+      );
+    }
+
+    let entity: any = null;
+    switch (linkType) {
+      case 'MainCategory':
+        entity = await this.prisma.mainCategory.findUnique({ where: { id: linkId! } });
+        break;
+      case 'Category':
+        entity = await this.prisma.category.findUnique({ where: { id: linkId! } });
+        break;
+      case 'SubCategory':
+        entity = await this.prisma.subCategory.findUnique({ where: { id: linkId! } });
+        break;
+      case 'Product':
+        entity = await this.prisma.product.findUnique({ where: { id: linkId! } });
+        break;
+    }
+
+    if (!entity) {
+      throw new BadRequestException(`${linkType} with ID '${linkId}' not found`);
+    }
+    if (entity.isDeleted) {
+      throw new BadRequestException(`${linkType} with ID '${linkId}' has been deleted`);
+    }
+    if (entity.status && entity.status !== 'Active') {
+      throw new BadRequestException(`${linkType} with ID '${linkId}' is not active`);
+    }
+  }
+
   // 1. Banners
   async getBanners() {
     return this.prisma.banner.findMany({
@@ -46,12 +103,26 @@ export class CmsService {
   }
 
   async createBanner(dto: CreateBannerDto) {
+    const linkType = dto.linkType || '';
+    const linkId = dto.linkId || '';
+
+    // Validate target entity if provided
+    if (linkType || linkId) {
+      await this.validateBannerTarget(linkType, linkId);
+    }
+
+    // Compute linkUrl from linkType+linkId (authoritative)
+    const computedLinkUrl = this.computeBannerLinkUrl(linkType, linkId);
+
     return this.prisma.banner.create({
       data: {
         id: generateObjectId(),
         title: dto.title,
         image: dto.image || '',
-        link: dto.link || '',
+        link: computedLinkUrl,
+        linkType,
+        linkId,
+        linkUrl: computedLinkUrl,
         position: Number(dto.position || 0),
         status: dto.status || 'Active',
       },
@@ -62,12 +133,26 @@ export class CmsService {
     const banner = await this.prisma.banner.findUnique({ where: { id } });
     if (!banner) throw new NotFoundException(`Banner with ID '${id}' not found`);
 
+    const linkType = dto.linkType !== undefined ? dto.linkType : banner.linkType;
+    const linkId = dto.linkId !== undefined ? dto.linkId : banner.linkId;
+
+    // Validate target entity if provided
+    if ((dto.linkType !== undefined || dto.linkId !== undefined) && (linkType || linkId)) {
+      await this.validateBannerTarget(linkType || undefined, linkId || undefined);
+    }
+
+    // Recompute linkUrl from authoritative fields
+    const computedLinkUrl = this.computeBannerLinkUrl(linkType || '', linkId || '');
+
     return this.prisma.banner.update({
       where: { id },
       data: {
         ...(dto.title && { title: dto.title }),
         ...(dto.image !== undefined && { image: dto.image }),
-        ...(dto.link !== undefined && { link: dto.link }),
+        link: computedLinkUrl,
+        linkType: linkType || '',
+        linkId: linkId || '',
+        linkUrl: computedLinkUrl,
         ...(dto.position !== undefined && { position: Number(dto.position) }),
         ...(dto.status && { status: dto.status }),
       },
@@ -92,6 +177,7 @@ export class CmsService {
     await this.prisma.banner.delete({ where: { id } });
     return { message: `Banner '${banner.title}' deleted successfully`, id };
   }
+
 
   // 2. Certificates
   async getCertificates() {

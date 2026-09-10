@@ -1,9 +1,9 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsOptional } from 'class-validator';
 
 export class CreateBannerDto {
   @IsString()
-  @IsNotEmpty()
-  title: string;
+  @IsOptional()
+  title?: string;
 
   @IsString()
   @IsOptional()
@@ -13,6 +13,18 @@ export class CreateBannerDto {
   @IsOptional()
   link?: string;
 
+  @IsString()
+  @IsOptional()
+  linkType?: string;
+
+  @IsString()
+  @IsOptional()
+  linkId?: string;
+
+  @IsString()
+  @IsOptional()
+  linkUrl?: string;
+
   @IsNumber()
   @IsOptional()
   position?: number;
@@ -21,3 +33,4 @@ export class CreateBannerDto {
   @IsOptional()
   status?: string;
 }
+

@@ -196,7 +196,7 @@ export default function CartPage() {
 
           <div className="flex flex-col gap-2.5 text-sm text-slate-600 border-b border-slate-100 pb-4 mb-4">
             <div className="flex justify-between">
-              <span>Subtotal:</span>
+              <span>Item Subtotal (incl. GST):</span>
               <span className="font-bold text-slate-800">₹{subtotal.toLocaleString('en-IN')}</span>
             </div>
             {discountAmount > 0 && (

@@ -66,7 +66,7 @@ const TodaysDealsBanner = () => {
   const computeLinkUrl = (type, id) => {
     if (!id) return '';
     if (type === 'MainCategory') return `/shop?mainCategory=${id}`;
-    if (type === 'Category') return `/category/${id}`;
+    if (type === 'Category') return `/shop?category=${id}`;
     if (type === 'SubCategory') return `/shop?subCategory=${id}`;
     if (type === 'Product') return `/product/${id}`;
     return '';
@@ -182,20 +182,20 @@ const TodaysDealsBanner = () => {
   };
 
   const getTargetOptions = () => {
-    if (linkType === 'MainCategory') return mainCategories.map(mc => ({ id: mc._id, name: mc.name }));
-    if (linkType === 'Category') return categories.map(c => ({ id: c._id, name: c.name }));
-    if (linkType === 'SubCategory') return subCategories.map(sc => ({ id: sc._id, name: sc.name }));
-    if (linkType === 'Product') return products.map(p => ({ id: p._id, name: p.name || p.title || 'Product' }));
+    if (linkType === 'MainCategory') return mainCategories.map(mc => ({ id: mc.id || mc._id, name: mc.name }));
+    if (linkType === 'Category') return categories.map(c => ({ id: c.id || c._id, name: c.name }));
+    if (linkType === 'SubCategory') return subCategories.map(sc => ({ id: sc.id || sc._id, name: sc.name }));
+    if (linkType === 'Product') return products.map(p => ({ id: p.id || p._id, name: p.name || p.title || 'Product' }));
     return [];
   };
 
   const getItemName = (b) => {
     if (!b.linkId) return 'N/A';
-    if (b.linkType === 'MainCategory') return mainCategories.find(mc => mc._id === b.linkId)?.name || b.linkId;
-    if (b.linkType === 'Category') return categories.find(c => c._id === b.linkId)?.name || b.linkId;
-    if (b.linkType === 'SubCategory') return subCategories.find(sc => sc._id === b.linkId)?.name || b.linkId;
+    if (b.linkType === 'MainCategory') return mainCategories.find(mc => (mc.id || mc._id) === b.linkId)?.name || b.linkId;
+    if (b.linkType === 'Category') return categories.find(c => (c.id || c._id) === b.linkId)?.name || b.linkId;
+    if (b.linkType === 'SubCategory') return subCategories.find(sc => (sc.id || sc._id) === b.linkId)?.name || b.linkId;
     if (b.linkType === 'Product') {
-      const p = products.find(prod => prod._id === b.linkId);
+      const p = products.find(prod => (prod.id || prod._id) === b.linkId);
       return p ? (p.name || p.title) : b.linkId;
     }
     return b.linkId;

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search, Heart, ShoppingCart, User, Menu, X, ChevronDown, ChevronRight, ArrowRight, Home, Grid, Tag, Package, PhoneCall, LogOut } from 'lucide-react';
 import { useCart } from '../../../contexts/CartContext';
 import { useWishlist } from '../../../contexts/WishlistContext';
@@ -11,11 +11,13 @@ import MarqueeBar from '../../home/MarqueeBar/MarqueeBar';
 import categoryService from '../../../services/category.service';
 import cmsService from '../../../services/cms.service';
 import getImageUrl from '../../../utils/image.utils';
+import { computeCmsTargetUrl } from '../../../utils/cms.utils';
 import { MainCategory, Category, SubCategory } from '../../../types/categories/category.types';
 
 export const Header: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchInput, setShowSearchInput] = useState(false);
@@ -160,8 +162,11 @@ export const Header: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/shop?q=${encodeURIComponent(searchQuery.trim())}`);
+    const query = searchQuery.trim();
+    if (query) {
+      const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
+      params.set('q', query);
+      router.push(`/shop?${params.toString()}`);
       setShowSearchInput(false);
     }
   };
@@ -426,7 +431,7 @@ export const Header: React.FC = () => {
                         onMouseEnter={() => handleMainCategoryHover(mId)}
                         onClick={() => {
                           setMegaMenuOpen(false);
-                          router.push(`/shop?mainCategory=${encodeURIComponent(mainCat.name)}`);
+                          router.push(computeCmsTargetUrl({ type: 'MainCategory', id: mainCat.id || mainCat._id }));
                         }}
                         className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-150 border-none w-full text-left cursor-pointer ${
                           isActive ? 'bg-primary text-white font-semibold' : 'text-slate-700 bg-transparent hover:bg-primary hover:text-white'
@@ -467,7 +472,7 @@ export const Header: React.FC = () => {
                         onMouseEnter={() => handleCategoryHover(cId)}
                         onClick={() => {
                           setMegaMenuOpen(false);
-                          router.push(`/shop?category=${encodeURIComponent(cat.name)}`);
+                          router.push(computeCmsTargetUrl({ type: 'Category', id: cat.id || cat._id }));
                         }}
                         className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-150 border-none w-full text-left cursor-pointer ${
                           isActive ? 'bg-primary text-white font-semibold' : 'text-slate-700 bg-transparent hover:bg-primary hover:text-white'
@@ -494,7 +499,7 @@ export const Header: React.FC = () => {
                       onMouseEnter={() => setHoveredSubCat(sub)}
                       onClick={() => {
                         setMegaMenuOpen(false);
-                        router.push(`/shop?subCategory=${encodeURIComponent(sub.name)}`);
+                        router.push(computeCmsTargetUrl({ type: 'SubCategory', id: sub.id || sub._id }));
                       }}
                       className="flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-150 border-none bg-transparent text-slate-700 hover:bg-primary hover:text-white w-full text-left cursor-pointer"
                     >
@@ -613,7 +618,7 @@ export const Header: React.FC = () => {
                                   <div key={cId} className="flex flex-col">
                                     <div className="flex items-center justify-between py-1 px-2 rounded hover:bg-white/80 transition-colors">
                                       <Link
-                                        href={`/shop?category=${encodeURIComponent(cat.name)}`}
+                                        href={computeCmsTargetUrl({ type: 'Category', id: cat.id || cat._id })}
                                         onClick={() => setMobileMenuOpen(false)}
                                         className="text-xs text-slate-700 font-semibold no-underline hover:text-primary"
                                       >
@@ -634,7 +639,7 @@ export const Header: React.FC = () => {
                                         {subCats.map((sub) => (
                                           <Link
                                             key={sub.id || sub._id}
-                                            href={`/shop?subCategory=${encodeURIComponent(sub.name)}`}
+                                            href={computeCmsTargetUrl({ type: 'SubCategory', id: sub.id || sub._id })}
                                             onClick={() => setMobileMenuOpen(false)}
                                             className="text-[0.78rem] text-slate-600 font-medium no-underline hover:text-primary py-0.5"
                                           >

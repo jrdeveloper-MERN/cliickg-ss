@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import cmsService from '../../../services/cms.service';
 import getImageUrl from '../../../utils/image.utils';
+import { computeCmsTargetUrl } from '../../../utils/cms.utils';
 import { HeroBanner as HeroBannerType } from '../../../types/cms/cms.types';
 import { HeroSkeleton } from '../../ui/Skeleton/Skeleton';
 
@@ -45,7 +46,7 @@ export const HeroBanner: React.FC = () => {
   if (banners.length === 0) return null;
 
   const currentBanner = banners[currentIndex];
-  const targetLink = currentBanner.linkUrl || '/shop';
+  const targetLink = computeCmsTargetUrl(currentBanner);
   const bannerImgSrc = getImageUrl(currentBanner.image);
 
   return (

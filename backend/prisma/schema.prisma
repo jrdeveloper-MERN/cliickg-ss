@@ -532,6 +532,9 @@ model Banner {
   title     String   @default("")
   image     String
   link      String   @default("")
+  linkType  String?  @default("")
+  linkId    String?  @default("")
+  linkUrl   String?  @default("")
   position  Int      @default(0)
   status    String   @default("Active")
   createdAt DateTime @default(now())

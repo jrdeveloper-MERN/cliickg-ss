@@ -37,13 +37,23 @@ export default function CategoryDetailPage() {
         setCategoryName(foundCat.name);
       }
 
-      const filtered = prodsRes.data.filter(
-        (p) =>
-          String(p.categoryId) === String(categoryId) ||
-          String(p.mainCategoryId) === String(categoryId) ||
-          String(p.subCategoryId) === String(categoryId) ||
-          (foundCat && p.categoryName === foundCat.name)
-      );
+      const extractId = (val: any): string => {
+        if (!val) return '';
+        if (typeof val === 'string') return val;
+        return val.id || val._id || '';
+      };
+
+      const filtered = prodsRes.data.filter((p: any) => {
+        const catId = extractId(p.categoryId);
+        const mainCatId = extractId(p.mainCategoryId);
+        const subCatId = extractId(p.subCategoryId);
+        return (
+          String(catId) === String(categoryId) ||
+          String(mainCatId) === String(categoryId) ||
+          String(subCatId) === String(categoryId) ||
+          (foundCat && (p.categoryName === foundCat.name || p.category?.name === foundCat.name))
+        );
+      });
 
       setProducts(filtered);
     } catch (err: any) {

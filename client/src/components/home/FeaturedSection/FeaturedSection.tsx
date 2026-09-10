@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import cmsService from '../../../services/cms.service';
 import getImageUrl from '../../../utils/image.utils';
+import { computeCmsTargetUrl } from '../../../utils/cms.utils';
 import Carousel from '../Carousel/Carousel';
 import { FeaturedSection as FeaturedSectionType } from '../../../types/cms/cms.types';
 import { ProductCardSkeleton } from '../../ui/Skeleton/Skeleton';
@@ -141,61 +142,28 @@ export const FeaturedSection: React.FC = () => {
 
             {isCarousel ? (
               <Carousel itemsPerView={getItemsPerView(section.gridType)} autoSwipe={true} autoSwipeInterval={3000}>
-                {items.map((item: any, idx: number) => (
-                  <Link
-                    key={idx}
-                    href={item.linkUrl || '/shop'}
-                    className={`w-full flex flex-col no-underline transition-all duration-300 ${
-                      isBanner
-                        ? 'border-none shadow-none bg-slate-900 rounded-2xl overflow-hidden'
-                        : 'bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-[0_4px_14px_rgba(0,0,0,0.03)] hover:-translate-y-1.5 hover:border-primary hover:shadow-[0_12px_28px_rgba(2,60,35,0.12)]'
-                    }`}
-                  >
-                    <div
-                      className={`w-full overflow-hidden flex items-center justify-center ${
-                        isBanner
-                          ? 'aspect-[16/9] sm:aspect-[21/9] lg:aspect-[24/8] bg-slate-900'
-                          : 'aspect-square bg-[#faf9f8]'
-                      }`}
-                    >
-                      <img
-                        src={getImageUrl(item.image)}
-                        alt={item.title || 'Featured item'}
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = '/uploads/fallbackimg.png';
-                        }}
-                        className="w-full h-full object-cover object-center transition-transform duration-500 hover:scale-105"
-                      />
-                    </div>
-                    {!isBanner && (
-                      <div className="border-t border-slate-100 py-3 px-2 bg-white text-center flex items-center justify-center min-h-[44px]">
-                        <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-wide line-clamp-1">{item.title}</span>
-                      </div>
-                    )}
-                  </Link>
-                ))}
-              </Carousel>
-            ) : (
-              <div className={gridClasses}>
-                {items.map((item: any, idx: number) => (
-                  <div key={idx} className="w-full flex">
+                {items.map((item: any, idx: number) => {
+                  const itemTargetUrl = computeCmsTargetUrl({
+                    linkUrl: item.linkUrl,
+                    linkType: item.linkType || section.type || section.selectType,
+                    linkId: item.linkId || item.name,
+                    id: item.linkId || item.name,
+                    name: item.name,
+                  });
+                  return (
                     <Link
-                      href={item.linkUrl || '/shop'}
+                      key={idx}
+                      href={itemTargetUrl}
                       className={`w-full flex flex-col no-underline transition-all duration-300 ${
                         isBanner
-                          ? 'border-none shadow-none bg-slate-900 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1'
-                          : 'bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-[0_4px_14px_rgba(0,0,0,0.03)] hover:-translate-y-1.5 hover:border-primary hover:shadow-[0_12px_28px_rgba(2,60,35,0.12)] h-full'
+                          ? 'border-none shadow-none bg-slate-900 rounded-2xl overflow-hidden'
+                          : 'bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-[0_4px_14px_rgba(0,0,0,0.03)] hover:-translate-y-1.5 hover:border-primary hover:shadow-[0_12px_28px_rgba(2,60,35,0.12)]'
                       }`}
                     >
                       <div
                         className={`w-full overflow-hidden flex items-center justify-center ${
                           isBanner
-                            ? section.gridType === 'Grid 2 (Mini Banner)' || section.gridType === 'Grid2'
-                              ? 'aspect-[16/9] sm:aspect-[16/8] lg:aspect-[16/7] bg-slate-900'
-                              : 'aspect-[16/9] sm:aspect-[21/9] lg:aspect-[24/8] bg-slate-900'
-                            : section.gridType === 'Grid 3' || section.gridType === 'Grid3'
-                            ? 'aspect-[4/3] sm:aspect-square md:aspect-[4/3] bg-[#faf9f8]'
+                            ? 'aspect-[16/9] sm:aspect-[21/9] lg:aspect-[24/8] bg-slate-900'
                             : 'aspect-square bg-[#faf9f8]'
                         }`}
                       >
@@ -215,8 +183,59 @@ export const FeaturedSection: React.FC = () => {
                         </div>
                       )}
                     </Link>
-                  </div>
-                ))}
+                  );
+                })}
+              </Carousel>
+            ) : (
+              <div className={gridClasses}>
+                {items.map((item: any, idx: number) => {
+                  const itemTargetUrl = computeCmsTargetUrl({
+                    linkUrl: item.linkUrl,
+                    linkType: item.linkType || section.type || section.selectType,
+                    linkId: item.linkId || item.name,
+                    id: item.linkId || item.name,
+                    name: item.name,
+                  });
+                  return (
+                    <div key={idx} className="w-full flex">
+                      <Link
+                        href={itemTargetUrl}
+                        className={`w-full flex flex-col no-underline transition-all duration-300 ${
+                          isBanner
+                            ? 'border-none shadow-none bg-slate-900 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1'
+                            : 'bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-[0_4px_14px_rgba(0,0,0,0.03)] hover:-translate-y-1.5 hover:border-primary hover:shadow-[0_12px_28px_rgba(2,60,35,0.12)] h-full'
+                        }`}
+                      >
+                        <div
+                          className={`w-full overflow-hidden flex items-center justify-center ${
+                            isBanner
+                              ? section.gridType === 'Grid 2 (Mini Banner)' || section.gridType === 'Grid2'
+                                ? 'aspect-[16/9] sm:aspect-[16/8] lg:aspect-[16/7] bg-slate-900'
+                                : 'aspect-[16/9] sm:aspect-[21/9] lg:aspect-[24/8] bg-slate-900'
+                              : section.gridType === 'Grid 3' || section.gridType === 'Grid3'
+                              ? 'aspect-[4/3] sm:aspect-square md:aspect-[4/3] bg-[#faf9f8]'
+                              : 'aspect-square bg-[#faf9f8]'
+                          }`}
+                        >
+                          <img
+                            src={getImageUrl(item.image)}
+                            alt={item.title || 'Featured item'}
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/uploads/fallbackimg.png';
+                            }}
+                            className="w-full h-full object-cover object-center transition-transform duration-500 hover:scale-105"
+                          />
+                        </div>
+                        {!isBanner && (
+                          <div className="border-t border-slate-100 py-3 px-2 bg-white text-center flex items-center justify-center min-h-[44px]">
+                            <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-wide line-clamp-1">{item.title}</span>
+                          </div>
+                        )}
+                      </Link>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

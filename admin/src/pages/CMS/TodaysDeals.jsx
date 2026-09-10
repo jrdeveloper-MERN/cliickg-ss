@@ -145,6 +145,15 @@ const TodaysDeals = () => {
     showToast('Deals editing cancelled', 'warn');
   };
 
+  const computeLinkUrl = (targetType, targetId) => {
+    if (!targetId) return '/shop';
+    if (targetType === 'Product' || targetType === 'product_price' || targetType === 'products_grid') return `/product/${targetId}`;
+    if (targetType === 'Category' || targetType === 'category') return `/shop?category=${targetId}`;
+    if (targetType === 'MainCategory' || targetType === 'main_category') return `/shop?mainCategory=${targetId}`;
+    if (targetType === 'SubCategory' || targetType === 'sub_category') return `/shop?subCategory=${targetId}`;
+    return '/shop';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -166,7 +175,18 @@ const TodaysDeals = () => {
         mediaType,
         productStyle,
         productIds: selectedProductIds,
-        items: items.map(it => ({ title: it.title, name: it.name, image: it.image }))
+        items: items.map(it => {
+          const targetId = it.name || it.linkId || '';
+          const targetType = type === 'main_category' ? 'MainCategory' : type === 'category' ? 'Category' : type === 'sub_category' ? 'SubCategory' : 'Product';
+          return {
+            title: it.title,
+            name: targetId,
+            image: it.image,
+            linkType: targetType,
+            linkId: targetId,
+            linkUrl: computeLinkUrl(targetType, targetId)
+          };
+        })
       };
 
       if (editingId) {
