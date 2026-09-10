@@ -546,7 +546,7 @@ const ProductForm = () => {
     <div className="flex flex-col gap-6 pb-8">
 
       {/* Top Header Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <button
           type="button"
           className="btn-secondary text-xs flex items-center gap-1.5"
@@ -557,11 +557,11 @@ const ProductForm = () => {
 
         <h1 className="heading-2">{isEdit ? 'Edit Product' : 'Add New Product'}</h1>
 
-        <div className="w-32"></div>
+        <div className="hidden sm:block w-32"></div>
       </div>
 
       {/* Minimalist Tab Navigation */}
-      <div className="flex bg-admin-card rounded-md p-1 border border-admin-border max-w-sm">
+      <div className="flex bg-admin-card rounded-md p-1 border border-admin-border w-full sm:max-w-sm">
         <button
           type="button"
           onClick={() => setActiveTab('basic')}

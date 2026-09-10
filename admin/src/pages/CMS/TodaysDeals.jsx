@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/Common/Pagination';
 import { Edit2, Trash2 } from 'lucide-react';
 
 const getImageUrl = (path) => {
@@ -12,6 +13,8 @@ const getImageUrl = (path) => {
 
 const TodaysDeals = () => {
   const [deals, setDeals] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [title, setTitle] = useState('');
   const [shortDesc, setShortDesc] = useState('');
   const [seoDesc, setSeoDesc] = useState('');
@@ -613,11 +616,11 @@ const TodaysDeals = () => {
                   <td colSpan="8" className="text-center text-admin-text-muted p-6">No Today Deals sections added yet</td>
                 </tr>
               ) : (
-                deals.map((item, idx) => {
+                deals.slice((page - 1) * limit, page * limit).map((item, idx) => {
                   const itemId = item.id || item._id;
                   return (
-                    <tr key={itemId || idx}>
-                      <td className="font-medium text-admin-text-secondary">{idx + 1}</td>
+                    <tr key={itemId || `td-${idx}`}>
+                      <td className="font-medium text-admin-text-secondary">{(page - 1) * limit + idx + 1}</td>
                       <td className="font-semibold text-admin-text-primary">{item.title}</td>
                       <td><span className="badge badge-accent">{item.type || item.selectType}</span></td>
                       <td>{item.gridType || 'Grid 4'}</td>
@@ -658,6 +661,14 @@ const TodaysDeals = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(deals.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={deals.length}
+          limit={limit}
+        />
       </div>
 
     </div>

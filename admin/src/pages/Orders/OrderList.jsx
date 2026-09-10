@@ -616,18 +616,13 @@ const OrderList = () => {
         )}
 
         {/* Pagination Footer */}
-        <div className="p-4 border-t border-admin-border flex justify-between items-center flex-wrap gap-4 text-xs text-admin-text-muted">
-          <div>
-            Showing {orders.length} of {total} orders
-          </div>
-          <Pagination
-            currentPage={page}
-            totalPages={Math.ceil(total / limit) || 1}
-            totalItems={total}
-            limit={limit}
-            onPageChange={(p) => setPage(p)}
-          />
-        </div>
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(total / limit) || 1}
+          totalItems={total}
+          limit={limit}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       {/* Large Enterprise View Order Drawer */}

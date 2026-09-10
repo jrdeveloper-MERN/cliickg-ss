@@ -348,7 +348,7 @@ const CustomerList = () => {
 
         <Pagination
           currentPage={page}
-          totalPages={Math.ceil(total / limit)}
+          totalPages={Math.ceil(total / limit) || 1}
           onPageChange={(p) => setPage(p)}
           totalItems={total}
           limit={limit}

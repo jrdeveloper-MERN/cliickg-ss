@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, Search, Truck, ExternalLink } from 'lucide-react';
 
 const Couriers = () => {
@@ -7,6 +8,8 @@ const Couriers = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   // Modal State
   const [isOpen, setIsOpen] = useState(false);
@@ -226,7 +229,7 @@ const Couriers = () => {
             type="text"
             placeholder="Search by courier name, code, website..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
 
@@ -234,7 +237,7 @@ const Couriers = () => {
           <select
             className="form-control text-xs h-10 w-auto min-w-[140px] rounded"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           >
             <option value="">All Statuses</option>
             <option value="Active">Active</option>
@@ -263,8 +266,8 @@ const Couriers = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredCouriers.map(courier => {
-                  const cId = courier._id || courier.id;
+                {filteredCouriers.slice((page - 1) * limit, page * limit).map((courier, cIdx) => {
+                  const cId = courier._id || courier.id || `cour-${cIdx}`;
                   const cName = courier.courierName || courier.name || 'Unnamed Courier';
                   const cCode = (courier.courierCode || courier.code || '').toUpperCase();
 
@@ -307,6 +310,14 @@ const Couriers = () => {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={page}
+            totalPages={Math.ceil(filteredCouriers.length / limit) || 1}
+            onPageChange={(p) => setPage(p)}
+            totalItems={filteredCouriers.length}
+            limit={limit}
+          />
         </div>
       )}
 

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/Common/Pagination';
 import { Edit2, Trash2, Upload, AlertCircle } from 'lucide-react';
 import { validateImageFile, IMAGE_SPECS, validateDropdown } from '../../utils/validation';
 
 const TodaysDealsBanner = () => {
   const [banners, setBanners] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [imageFile, setImageFile] = useState(null);
   const [preview, setPreview] = useState('');
   const [linkType, setLinkType] = useState('MainCategory');
@@ -323,8 +326,8 @@ const TodaysDealsBanner = () => {
                   </td>
                 </tr>
               ) : (
-                banners.map((b) => (
-                  <tr key={b._id}>
+                banners.slice((page - 1) * limit, page * limit).map((b, bIdx) => (
+                  <tr key={b._id || b.id || `tdb-${bIdx}`}>
                     <td>
                       <img src={b.image} alt="Banner" className="h-12 w-28 rounded-md object-cover border border-admin-border" />
                     </td>
@@ -341,7 +344,7 @@ const TodaysDealsBanner = () => {
                         <input
                           type="checkbox"
                           checked={b.status === 'Active'}
-                          onChange={() => handleToggleStatus(b._id)}
+                          onChange={() => handleToggleStatus(b._id || b.id)}
                         />
                         <span className="slider"></span>
                       </label>
@@ -358,7 +361,7 @@ const TodaysDealsBanner = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(b._id)}
+                          onClick={() => handleDelete(b._id || b.id)}
                           className="btn-danger p-1.5"
                           title="Delete Banner"
                         >
@@ -372,6 +375,14 @@ const TodaysDealsBanner = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(banners.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={banners.length}
+          limit={limit}
+        />
       </div>
 
     </div>

@@ -107,7 +107,7 @@ const ProductList = () => {
         )}
 
         {/* Controls: Show entries & Search */}
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3 sm:gap-4">
           <div className="flex items-center gap-2 text-xs text-admin-text-secondary">
             <span>Show</span>
             <select
@@ -126,7 +126,7 @@ const ProductList = () => {
             <span>entries</span>
           </div>
 
-          <div className="search-box w-64">
+          <div className="search-box w-full sm:w-64">
             <Search size={15} className="text-admin-text-muted shrink-0 pointer-events-none" />
             <input
               type="text"

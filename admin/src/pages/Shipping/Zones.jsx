@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, Search, Check, X, ShieldAlert, Globe, MapPin } from 'lucide-react';
 
 const Zones = () => {
@@ -8,6 +9,8 @@ const Zones = () => {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   // Modal State
   const [isOpen, setIsOpen] = useState(false);
@@ -237,7 +240,7 @@ const Zones = () => {
             type="text"
             placeholder="Search by zone name, state, district, country..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
 
@@ -245,7 +248,7 @@ const Zones = () => {
           <select
             className="form-control text-xs h-10 w-auto min-w-[150px] rounded"
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
           >
             <option value="">All Zone Types</option>
             <option value="Domestic">Domestic</option>
@@ -255,7 +258,7 @@ const Zones = () => {
           <select
             className="form-control text-xs h-10 w-auto min-w-[140px] rounded"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           >
             <option value="">All Statuses</option>
             <option value="Active">Active</option>
@@ -285,8 +288,8 @@ const Zones = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredZones.map(zone => {
-                  const zId = zone._id || zone.id;
+                {filteredZones.slice((page - 1) * limit, page * limit).map((zone, zIdx) => {
+                  const zId = zone._id || zone.id || `z-${zIdx}`;
                   const zName = zone.zoneName || zone.name || 'Unnamed Zone';
                   const zType = (zone.zoneType || zone.type || 'Domestic') === 'International' ? 'International' : 'Domestic';
                   const zLocation = zType === 'Domestic' 
@@ -341,6 +344,14 @@ const Zones = () => {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={page}
+            totalPages={Math.ceil(filteredZones.length / limit) || 1}
+            onPageChange={(p) => setPage(p)}
+            totalItems={filteredZones.length}
+            limit={limit}
+          />
         </div>
       )}
 

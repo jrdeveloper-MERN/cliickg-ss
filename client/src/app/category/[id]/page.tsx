@@ -70,9 +70,6 @@ export default function CategoryDetailPage() {
         <h1 className="font-serif text-3xl sm:text-4xl font-light text-slate-900 m-0">
           {categoryName}
         </h1>
-        <p className="text-sm text-slate-500 mt-1 mb-0">
-          Explore our exclusive certified collection
-        </p>
       </div>
 
       <ProductGrid products={products} loading={loading} />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, Check, X, Info, Search, Upload, Image as ImageIcon } from 'lucide-react';
 
 const StorePromises = () => {
@@ -454,31 +455,13 @@ const StorePromises = () => {
         </div>
 
         {/* Table Footer Pagination */}
-        <div className="flex justify-between items-center mt-5 flex-wrap gap-4">
-          <span className="text-xs text-admin-text-muted">
-            Showing {filteredItems.length === 0 ? 0 : (currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, filteredItems.length)} of {filteredItems.length} entries
-          </span>
-
-          <div className="flex gap-1">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => p - 1)}
-              className="btn-secondary py-1.5 px-3 text-xs disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span className="py-1.5 px-3 text-xs rounded bg-admin-accent text-white font-semibold">
-              {currentPage}
-            </span>
-            <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage(p => p + 1)}
-              className="btn-secondary py-1.5 px-3 text-xs disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={(p) => setCurrentPage(p)}
+          totalItems={filteredItems.length}
+          limit={entriesPerPage}
+        />
       </div>
     </div>
   );

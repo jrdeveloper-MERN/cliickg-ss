@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, HelpCircle, Package, Truck } from 'lucide-react';
 
 const Charges = () => {
@@ -8,6 +9,9 @@ const Charges = () => {
   const [zones, setZones] = useState([]);
   const [packagingRules, setPackagingRules] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [chargePage, setChargePage] = useState(1);
+  const [pkgPage, setPkgPage] = useState(1);
+  const limit = 10;
 
   // Delivery Charges Modal State
   const [isChargeOpen, setIsChargeOpen] = useState(false);
@@ -324,8 +328,8 @@ const Charges = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {charges.map(rule => {
-                      const rId = rule._id || rule.id;
+                    {charges.slice((chargePage - 1) * limit, chargePage * limit).map((rule, rIdx) => {
+                      const rId = rule._id || rule.id || `c-${rIdx}`;
                       const zoneName = rule.zone?.name || rule.zoneId?.name || rule.zoneId?.zoneName || 'Global / All Zones';
                       const method = rule.pricingMethod || 'FLAT';
 
@@ -379,6 +383,14 @@ const Charges = () => {
                   </tbody>
                 </table>
               </div>
+
+              <Pagination
+                currentPage={chargePage}
+                totalPages={Math.ceil(charges.length / limit) || 1}
+                onPageChange={(p) => setChargePage(p)}
+                totalItems={charges.length}
+                limit={limit}
+              />
             </div>
           )}
         </>
@@ -407,8 +419,8 @@ const Charges = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {packagingRules.map(pkg => {
-                      const pId = pkg._id || pkg.id;
+                    {packagingRules.slice((pkgPage - 1) * limit, pkgPage * limit).map((pkg, pIdx) => {
+                      const pId = pkg._id || pkg.id || `p-${pIdx}`;
                       const base = Number(pkg.baseAmount ?? pkg.charge ?? 0);
                       const gst = Number(pkg.gstRate ?? 18);
                       const total = (base + (base * gst / 100)).toFixed(2);
@@ -439,6 +451,14 @@ const Charges = () => {
                   </tbody>
                 </table>
               </div>
+
+              <Pagination
+                currentPage={pkgPage}
+                totalPages={Math.ceil(packagingRules.length / limit) || 1}
+                onPageChange={(p) => setPkgPage(p)}
+                totalItems={packagingRules.length}
+                limit={limit}
+              />
             </div>
           )}
         </>

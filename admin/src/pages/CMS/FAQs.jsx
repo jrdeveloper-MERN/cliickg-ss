@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import RichTextEditor from '../../components/Common/RichTextEditor';
+import Pagination from '../../components/Common/Pagination';
 import { Edit2, Trash2, AlertCircle } from 'lucide-react';
 
 const FAQs = () => {
@@ -12,6 +13,8 @@ const FAQs = () => {
   const [status, setStatus] = useState('Active');
   const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   const { showToast } = useToast();
 
@@ -227,9 +230,9 @@ const FAQs = () => {
                   </td>
                 </tr>
               ) : (
-                faqs.map((f, idx) => (
-                  <tr key={f._id || idx}>
-                    <td className="font-medium text-admin-text-secondary">{idx + 1}</td>
+                faqs.slice((page - 1) * limit, page * limit).map((f, idx) => (
+                  <tr key={f._id || f.id || `faq-${idx}`}>
+                    <td className="font-medium text-admin-text-secondary">{(page - 1) * limit + idx + 1}</td>
                     <td className="font-semibold text-admin-text-primary max-w-[220px]">{f.question}</td>
                     <td className="max-w-xs text-xs text-admin-text-secondary leading-relaxed">
                       <div dangerouslySetInnerHTML={{ __html: f.answer }} />
@@ -240,7 +243,7 @@ const FAQs = () => {
                         <input
                           type="checkbox"
                           checked={f.status === 'Active'}
-                          onChange={() => handleToggleStatus(f._id, f.status)}
+                          onChange={() => handleToggleStatus(f._id || f.id, f.status)}
                         />
                         <span className="slider"></span>
                       </label>
@@ -257,7 +260,7 @@ const FAQs = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(f._id)}
+                          onClick={() => handleDelete(f._id || f.id)}
                           className="btn-danger p-1.5"
                           title="Delete FAQ"
                         >
@@ -271,6 +274,14 @@ const FAQs = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(faqs.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={faqs.length}
+          limit={limit}
+        />
       </div>
 
     </div>

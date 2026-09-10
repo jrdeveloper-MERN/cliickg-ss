@@ -78,23 +78,23 @@ const Dashboard = () => {
       </div>
 
       {/* Core Logistics KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {statsList.map((st, idx) => {
           const IconComp = st.icon;
           return (
             <div
               key={idx}
-              className="card-minimal cursor-pointer p-5 hover:border-admin-accent transition-colors"
+              className="card-minimal cursor-pointer p-4 sm:p-5 hover:border-admin-accent transition-colors"
               onClick={() => navigate(st.link)}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-admin-text-secondary">{st.title}</span>
-                <div className="w-8 h-8 rounded-md bg-admin-subtle text-admin-accent flex items-center justify-center">
+                <div className="w-8 h-8 rounded-md bg-admin-subtle text-admin-accent flex items-center justify-center shrink-0">
                   <IconComp size={16} />
                 </div>
               </div>
 
-              <div className="text-2xl font-bold text-admin-text-primary my-3 tracking-tight">
+              <div className="text-xl sm:text-2xl font-bold text-admin-text-primary my-2 sm:my-3 tracking-tight truncate">
                 {st.value}
               </div>
 
@@ -107,13 +107,13 @@ const Dashboard = () => {
       </div>
 
       {/* Operational Logistics Status */}
-      <div className="card-minimal p-5">
+      <div className="card-minimal p-4 sm:p-5">
         <h3 className="heading-3 mb-4">Shipping Order Analytics</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           {operationalList.map((op, idx) => (
-            <div key={idx} className="bg-admin-subtle border border-admin-border rounded-lg p-4 text-center">
+            <div key={idx} className="bg-admin-subtle border border-admin-border rounded-lg p-3.5 text-center">
               <span className="text-xs text-admin-text-secondary">{op.title}</span>
-              <div className={`text-2xl font-bold my-2 ${op.color}`}>
+              <div className={`text-xl sm:text-2xl font-bold my-1.5 ${op.color}`}>
                 {op.value}
               </div>
               <span className="text-[11px] text-admin-text-muted">{op.label}</span>

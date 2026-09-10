@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, Image as ImageIcon } from 'lucide-react';
 
 const SubCategories = () => {
@@ -12,6 +13,8 @@ const SubCategories = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   const [name, setName] = useState('');
   const [mainCategoryId, setMainCategoryId] = useState('');
@@ -96,7 +99,7 @@ const SubCategories = () => {
     try {
       const targetId = id;
       const res = await api.patch(`/sub-categories/${targetId}/status`);
-      setItems(prev => prev.map((i) => (i._id === targetId || i.id === targetId) ? { ...i, ...res.data, _id: res.data._id || res.data.id || targetId } : i));
+      setItems(prev => prev.map(i => (i._id === targetId || i.id === targetId) ? { ...i, ...res.data, _id: res.data._id || res.data.id || targetId } : i));
       showToast('Status updated successfully');
     } catch (err) {
       showToast('Failed to update status', 'error');
@@ -107,7 +110,11 @@ const SubCategories = () => {
     if (!window.confirm('Are you sure you want to delete this Sub Category?')) return;
     try {
       const res = await api.delete(`/sub-categories/${id}`);
-      setItems(items.filter((i) => i._id !== id && i.id !== id));
+      const updated = items.filter(i => i._id !== id && i.id !== id);
+      setItems(updated);
+      if ((page - 1) * limit >= updated.length && page > 1) {
+        setPage(page - 1);
+      }
       showToast(res.data?.message || 'Sub Category deleted successfully');
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data?.errors?.[0] || 'Failed to delete Sub Category';
@@ -134,13 +141,14 @@ const SubCategories = () => {
         const res = await api.put(`/sub-categories/${editingId}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        setItems(items.map((i) => (i._id === editingId ? res.data : i)));
+        setItems(items.map(i => i._id === editingId ? res.data : i));
         showToast('Sub Category updated successfully');
       } else {
         const res = await api.post('/sub-categories', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         setItems([res.data, ...items]);
+        setPage(1);
         showToast('Sub Category created successfully');
       }
       setIsModalOpen(false);
@@ -148,6 +156,8 @@ const SubCategories = () => {
       showToast(err.response?.data?.message || 'Error saving Sub Category', 'error');
     }
   };
+
+  const paginatedItems = items.slice((page - 1) * limit, page * limit);
 
   return (
     <div className="flex flex-col gap-6">
@@ -182,9 +192,9 @@ const SubCategories = () => {
               ) : items.length === 0 ? (
                 <tr><td colSpan="7" className="text-center text-admin-text-muted p-6">No Sub Categories found</td></tr>
               ) : (
-                items.map((item, idx) => (
-                  <tr key={item._id}>
-                    <td className="font-medium text-admin-text-secondary">{idx + 1}</td>
+                paginatedItems.map((item, idx) => (
+                  <tr key={item._id || item.id || `subcat-${idx}`}>
+                    <td className="font-medium text-admin-text-secondary">{(page - 1) * limit + idx + 1}</td>
                     <td className="font-semibold text-admin-text-primary">{item.name}</td>
                     <td>
                       {item.image ? (
@@ -214,7 +224,7 @@ const SubCategories = () => {
                         <input
                           type="checkbox"
                           checked={item.status === 'Active'}
-                          onChange={() => handleToggleStatus(item._id)}
+                          onChange={() => handleToggleStatus(item._id || item.id)}
                         />
                         <span className="slider"></span>
                       </label>
@@ -232,7 +242,7 @@ const SubCategories = () => {
                         <button
                           type="button"
                           className="btn-ghost p-1.5 text-admin-danger"
-                          onClick={() => handleDelete(item._id)}
+                          onClick={() => handleDelete(item._id || item.id)}
                           title="Delete"
                         >
                           <Trash2 size={15} />
@@ -245,6 +255,14 @@ const SubCategories = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(items.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={items.length}
+          limit={limit}
+        />
       </div>
 
       {/* Add / Edit Modal */}

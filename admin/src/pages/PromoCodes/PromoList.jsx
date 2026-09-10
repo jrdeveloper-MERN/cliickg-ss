@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
+import Pagination from '../../components/Common/Pagination';
 import {
   Plus, Edit2, Trash2, Tag, Search, BarChart2, CheckCircle, XCircle,
   Users, ShoppingBag, IndianRupee, Sparkles, Filter, Calendar, ShieldAlert,
@@ -33,6 +34,8 @@ const PromoList = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [modalTab, setModalTab] = useState('general'); // 'general','customer','product','conditions','display','analytics'
 
   // Analytics Overview Data
@@ -579,6 +582,7 @@ const PromoList = () => {
               type="button"
               onClick={() => {
                 setStatusFilter(t.id);
+                setPage(1);
                 fetchPromos(t.id);
               }}
               className={`py-1.5 px-3.5 rounded text-xs font-semibold cursor-pointer border transition-colors ${statusFilter === t.id
@@ -604,112 +608,122 @@ const PromoList = () => {
               <p className="text-admin-text-muted text-xs mt-1">Click &quot;Create Promo Code&quot; to launch a promotion campaign.</p>
             </div>
           ) : (
-            <div className="data-table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Coupon &amp; Code</th>
-                    <th>Discount &amp; Rules</th>
-                    <th>Target Components</th>
-                    <th>Customer Eligibility</th>
-                    <th>Validity Period</th>
-                    <th>Status</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const isExpired = item.endDate && new Date(item.endDate) < new Date();
-                    const isInactive = item.status === 'Inactive' || item.status === 'inactive';
-                    const badgeClasses = isInactive
-                      ? 'border border-admin-border bg-admin-subtle text-admin-text-muted'
-                      : isExpired
-                        ? 'border border-amber-400/30 bg-amber-400/10 text-amber-600'
-                        : 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-600';
+            <>
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Coupon &amp; Code</th>
+                      <th>Discount &amp; Rules</th>
+                      <th>Target Components</th>
+                      <th>Customer Eligibility</th>
+                      <th>Validity Period</th>
+                      <th>Status</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.slice((page - 1) * limit, page * limit).map((item, pIdx) => {
+                      const isExpired = item.endDate && new Date(item.endDate) < new Date();
+                      const isInactive = item.status === 'Inactive' || item.status === 'inactive';
+                      const badgeClasses = isInactive
+                        ? 'border border-admin-border bg-admin-subtle text-admin-text-muted'
+                        : isExpired
+                          ? 'border border-amber-400/30 bg-amber-400/10 text-amber-600'
+                          : 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-600';
 
-                    const badgeLabel = isInactive ? '○ Inactive' : isExpired ? '⌛ Expired (History)' : '● Active';
+                      const badgeLabel = isInactive ? '○ Inactive' : isExpired ? '⌛ Expired (History)' : '● Active';
 
-                    return (
-                      <tr key={item._id}>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <span className="badge badge-accent font-bold">
-                              {item.code}
-                            </span>
-                            <div>
-                              <div className="font-semibold text-admin-text-primary">{item.name || item.code}</div>
-                              <div className="text-xs text-admin-text-muted">{item.shortDescription || item.message}</div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="font-semibold text-admin-text-primary">
-                            {item.discountType === 'Percentage' ? `${item.discountValue || item.discount}% OFF` : `₹${item.discountValue || item.discount} OFF`}
-                          </div>
-                          <div className="text-xs text-admin-text-muted">
-                            Min Cart: ₹{(item.minOrderAmount || 0).toLocaleString('en-IN')}
-                            {item.maxDiscountAmount > 0 && ` | Max Cap: ₹${item.maxDiscountAmount}`}
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="flex flex-wrap gap-1">
-                            {(item.applyDiscountOn && item.applyDiscountOn.length > 0 ? item.applyDiscountOn : [item.targetComponent || 'Product Base Price']).slice(0, 3).map((comp, idx) => (
-                              <span key={idx} className="bg-admin-subtle text-admin-text-secondary border border-admin-border text-[11px] font-medium py-0.5 px-2 rounded">
-                                {comp}
+                      return (
+                        <tr key={item._id || item.id || `promo-${pIdx}`}>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <span className="badge badge-accent font-bold">
+                                {item.code}
                               </span>
-                            ))}
-                          </div>
-                        </td>
+                              <div>
+                                <div className="font-semibold text-admin-text-primary">{item.name || item.code}</div>
+                                <div className="text-xs text-admin-text-muted">{item.shortDescription || item.message}</div>
+                              </div>
+                            </div>
+                          </td>
 
-                        <td>
-                          <div className="text-xs font-medium text-admin-text-primary">
-                            {item.customerEligibility || item.userType || 'All Customers'}
-                          </div>
-                          {item.specificCustomerEmail && (
-                            <div className="text-[11px] text-admin-text-muted">{item.specificCustomerEmail}</div>
-                          )}
-                        </td>
+                          <td>
+                            <div className="font-semibold text-admin-text-primary">
+                              {item.discountType === 'Percentage' ? `${item.discountValue || item.discount}% OFF` : `₹${item.discountValue || item.discount} OFF`}
+                            </div>
+                            <div className="text-xs text-admin-text-muted">
+                              Min Cart: ₹{(item.minOrderAmount || 0).toLocaleString('en-IN')}
+                              {item.maxDiscountAmount > 0 && ` | Max Cap: ₹${item.maxDiscountAmount}`}
+                            </div>
+                          </td>
 
-                        <td className="text-xs text-admin-text-muted">
-                          <div>{item.startDate ? new Date(item.startDate).toLocaleDateString() : 'N/A'}</div>
-                          <div>to {item.endDate ? new Date(item.endDate).toLocaleDateString() : 'N/A'}</div>
-                        </td>
+                          <td>
+                            <div className="flex flex-wrap gap-1">
+                              {(item.applyDiscountOn && item.applyDiscountOn.length > 0 ? item.applyDiscountOn : [item.targetComponent || 'Product Base Price']).slice(0, 3).map((comp, idx) => (
+                                <span key={idx} className="bg-admin-subtle text-admin-text-secondary border border-admin-border text-[11px] font-medium py-0.5 px-2 rounded">
+                                  {comp}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
 
-                        <td>
-                          <button
-                            onClick={() => handleToggleStatus(item._id)}
-                            className={`py-1 px-2.5 rounded-full text-xs font-semibold cursor-pointer ${badgeClasses}`}
-                          >
-                            {badgeLabel}
-                          </button>
-                        </td>
+                          <td>
+                            <div className="text-xs font-medium text-admin-text-primary">
+                              {item.customerEligibility || item.userType || 'All Customers'}
+                            </div>
+                            {item.specificCustomerEmail && (
+                              <div className="text-[11px] text-admin-text-muted">{item.specificCustomerEmail}</div>
+                            )}
+                          </td>
 
-                        <td className="text-right">
-                          <div className="flex justify-end gap-1.5">
+                          <td className="text-xs text-admin-text-muted">
+                            <div>{item.startDate ? new Date(item.startDate).toLocaleDateString() : 'N/A'}</div>
+                            <div>to {item.endDate ? new Date(item.endDate).toLocaleDateString() : 'N/A'}</div>
+                          </td>
+
+                          <td>
                             <button
-                              onClick={() => handleOpenModal(item)}
-                              className="btn-secondary py-1 px-2 text-admin-accent"
-                              title="Edit Promotion"
+                              onClick={() => handleToggleStatus(item._id || item.id)}
+                              className={`py-1 px-2.5 rounded-full text-xs font-semibold cursor-pointer ${badgeClasses}`}
                             >
-                              <Edit2 size={14} />
+                              {badgeLabel}
                             </button>
-                            <button
-                              onClick={() => handleDelete(item._id)}
-                              className="btn-danger py-1 px-2"
-                              title="Delete Promotion"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+
+                          <td className="text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenModal(item)}
+                                className="btn-secondary py-1 px-2 text-admin-accent"
+                                title="Edit Promotion"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item._id || item.id)}
+                                className="btn-danger py-1 px-2"
+                                title="Delete Promotion"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                currentPage={page}
+                totalPages={Math.ceil(items.length / limit) || 1}
+                onPageChange={(p) => setPage(p)}
+                totalItems={items.length}
+                limit={limit}
+              />
+            </>
           )}
         </div>
       ) : (

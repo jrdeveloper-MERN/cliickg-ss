@@ -100,23 +100,23 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
         {statsList.map((st, idx) => {
           const IconComp = st.icon;
           return (
             <div
               key={idx}
-              className="bg-admin-card border border-admin-border rounded-admin-sm p-5 shadow-admin-sm hover:shadow-admin-md transition-all duration-150 cursor-pointer"
+              className="bg-admin-card border border-admin-border rounded-admin-sm p-4 sm:p-5 shadow-admin-sm hover:shadow-admin-md transition-all duration-150 cursor-pointer"
               onClick={() => navigate(st.link)}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-admin-text-secondary">{st.title}</span>
-                <div className="w-8 h-8 rounded-md bg-admin-subtle text-admin-accent flex items-center justify-center">
+                <div className="w-8 h-8 rounded-md bg-admin-subtle text-admin-accent flex items-center justify-center shrink-0">
                   <IconComp size={16} />
                 </div>
               </div>
 
-              <div className="text-2xl font-bold text-admin-text-primary my-3 mb-1.5 tracking-tight">
+              <div className="text-xl sm:text-2xl font-bold text-admin-text-primary my-2 sm:my-3 mb-1.5 tracking-tight truncate">
                 {st.value}
               </div>
 
@@ -141,14 +141,14 @@ const Dashboard = () => {
       {/* Tables Section */}
       <div className="flex flex-col gap-6 mt-2">
         {/* Recent Orders Table */}
-        <div className="bg-admin-card border border-admin-border rounded-admin-sm p-5 shadow-admin-sm">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="bg-admin-card border border-admin-border rounded-admin-sm p-4 sm:p-5 shadow-admin-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
             <div>
               <h3 className="heading-3">Recent Orders</h3>
               <span className="subheading">Latest 10 orders received</span>
             </div>
 
-            <div className="search-box w-56 !h-8.5">
+            <div className="search-box w-full sm:w-56 !h-8.5">
               <Search size={14} className="text-admin-text-muted shrink-0 pointer-events-none" />
               <input
                 type="text"
@@ -208,14 +208,14 @@ const Dashboard = () => {
         </div>
 
         {/* Recent Customers Table */}
-        <div className="bg-admin-card border border-admin-border rounded-admin-sm p-5 shadow-admin-sm">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="bg-admin-card border border-admin-border rounded-admin-sm p-4 sm:p-5 shadow-admin-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
             <div>
               <h3 className="heading-3">Recent Customers</h3>
               <span className="subheading">Newly registered customer accounts</span>
             </div>
 
-            <div className="search-box w-56 !h-8.5">
+            <div className="search-box w-full sm:w-56 !h-8.5">
               <Search size={14} className="text-admin-text-muted shrink-0 pointer-events-none" />
               <input
                 type="text"

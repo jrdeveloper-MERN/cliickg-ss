@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import { Plus, Edit2, Trash2, Upload, ChevronUp, AlertCircle, Eye, Award } from 'lucide-react';
+import Pagination from '../../components/Common/Pagination';
+import { Plus, Edit2, Trash2, Award, Upload, AlertCircle, Eye, X, ChevronUp } from 'lucide-react';
 import { validateImageFile, IMAGE_SPECS, validateDropdown } from '../../utils/validation';
 import Modal from '../../components/Common/Modal';
 
 const Certificates = () => {
   const [certs, setCerts] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [showAddForm, setShowAddForm] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -283,8 +286,8 @@ const Certificates = () => {
                   </td>
                 </tr>
               ) : (
-                certs.map((c) => {
-                  const certId = c._id || c.id;
+                certs.slice((page - 1) * limit, page * limit).map((c, cIdx) => {
+                  const certId = c._id || c.id || `cert-${cIdx}`;
                   const certImg = c.image ? (c.image.startsWith('http') || c.image.startsWith('/') ? c.image : `/${c.image}`) : '';
                   return (
                     <tr key={certId} className="hover:bg-admin-subtle/50 transition-colors">
@@ -355,6 +358,14 @@ const Certificates = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(certs.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={certs.length}
+          limit={limit}
+        />
       </div>
 
       {/* Full Resolution Preview Modal */}

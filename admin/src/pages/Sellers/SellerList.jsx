@@ -115,7 +115,7 @@ const SellerList = () => {
       {/* Filter & Search Toolbar */}
       <div className="card-minimal p-4 flex flex-col gap-3.5">
         {/* Status Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-2">
           {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].map((st) => (
             <button
               key={st}
@@ -246,15 +246,13 @@ const SellerList = () => {
         </div>
 
         {/* Pagination Footer */}
-        {total > limit && (
-          <Pagination
-            currentPage={page}
-            totalPages={Math.ceil(total / limit)}
-            onPageChange={(p) => setPage(p)}
-            totalItems={total}
-            limit={limit}
-          />
-        )}
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(total / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={total}
+          limit={limit}
+        />
       </div>
 
       {/* Seller Details & Approval Modal */}

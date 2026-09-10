@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import RichTextEditor from '../../components/Common/RichTextEditor';
+import Pagination from '../../components/Common/Pagination';
 import { Edit2, Trash2 } from 'lucide-react';
 
 const ScrollHeading = () => {
   const [headings, setHeadings] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [text, setText] = useState('');
   const [status, setStatus] = useState('Active');
   const [editingId, setEditingId] = useState(null);
@@ -134,11 +137,11 @@ const ScrollHeading = () => {
                   </td>
                 </tr>
               ) : (
-                headings.map((item, idx) => {
+                headings.slice((page - 1) * limit, page * limit).map((item, idx) => {
                   const itemId = item.id || item._id;
                   return (
-                    <tr key={itemId || idx}>
-                      <td className="font-medium text-admin-text-secondary">{idx + 1}</td>
+                    <tr key={itemId || `sh-${idx}`}>
+                      <td className="font-medium text-admin-text-secondary">{(page - 1) * limit + idx + 1}</td>
                       <td className="font-semibold text-admin-text-primary max-w-md">
                         <div dangerouslySetInnerHTML={{ __html: item.text || item.title }} />
                       </td>
@@ -179,6 +182,14 @@ const ScrollHeading = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(headings.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={headings.length}
+          limit={limit}
+        />
       </div>
 
     </div>

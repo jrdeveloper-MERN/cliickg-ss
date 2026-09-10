@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/Common/Pagination';
 import { Trash2, Edit2, Check, RefreshCw, X, Sliders } from 'lucide-react';
 
 const AttributeMapping = () => {
@@ -9,6 +10,8 @@ const AttributeMapping = () => {
   const [allCategories, setAllCategories] = useState([]);
   const [allSubCategories, setAllSubCategories] = useState([]);
   const [captions, setCaptions] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   // Form states
   const [editingId, setEditingId] = useState(null);
@@ -422,8 +425,8 @@ const AttributeMapping = () => {
               {mappings.length === 0 ? (
                 <tr><td colSpan="7" className="text-center text-admin-text-muted p-6">No Attribute Mappings created yet</td></tr>
               ) : (
-                mappings.map((m) => (
-                  <tr key={m._id}>
+                mappings.slice((page - 1) * limit, page * limit).map((m, mIdx) => (
+                  <tr key={m._id || m.id || `am-${mIdx}`}>
                     <td>
                       {m.attributeId?.image ? (
                         <img src={getImageUrl(m.attributeId.image)} alt={m.attributeId?.caption} className="w-8 h-8 rounded-md object-cover" />
@@ -463,7 +466,7 @@ const AttributeMapping = () => {
                         <button className="btn-secondary p-1.5" onClick={() => handleEditMapping(m)} title="Edit Mapping">
                           <Edit2 size={15} className="text-blue-500" />
                         </button>
-                        <button className="btn-danger p-1.5" onClick={() => handleDeleteMapping(m._id)} title="Delete Mapping">
+                        <button className="btn-danger p-1.5" onClick={() => handleDeleteMapping(m._id || m.id)} title="Delete Mapping">
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -474,6 +477,14 @@ const AttributeMapping = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(mappings.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={mappings.length}
+          limit={limit}
+        />
       </div>
     </div>
   );

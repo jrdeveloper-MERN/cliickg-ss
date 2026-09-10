@@ -5,7 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { LogOut, User, Sun, Moon, Menu, ChevronRight, Loader2 } from 'lucide-react';
 import Modal from '../Common/Modal';
 
-const Header = ({ collapsed, toggleSidebar }) => {
+const Header = ({ toggleMobileSidebar }) => {
   const { user, logout } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const location = useLocation();
@@ -47,33 +47,30 @@ const Header = ({ collapsed, toggleSidebar }) => {
   const breadcrumbs = generateBreadcrumbs();
 
   return (
-    <header
-      className={`h-16 bg-admin-card border-b border-admin-border flex items-center justify-between px-6 sticky top-0 z-[90] transition-[margin-left,background-color,border-color] duration-200 ${collapsed ? 'ml-16' : 'ml-60'
-        }`}
-    >
-      {/* Left: Hamburger Toggle + Breadcrumbs */}
-      <div className="flex items-center gap-4">
+    <header className="h-16 bg-admin-card border-b border-admin-border flex items-center justify-between px-3 sm:px-6 fixed top-0 right-0 left-0 lg:left-60 z-[90] transition-[left,background-color,border-color] duration-200">
+      {/* Left: Mobile Hamburger Toggle + Breadcrumbs */}
+      <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
         <button
           type="button"
-          onClick={toggleSidebar}
-          className="bg-transparent border-none text-admin-text-secondary hover:text-admin-text-primary cursor-pointer flex items-center justify-center p-1 rounded-md transition-colors"
-          title="Toggle Navigation"
+          onClick={toggleMobileSidebar}
+          className="lg:hidden bg-transparent border-none text-admin-text-secondary hover:text-admin-text-primary cursor-pointer flex items-center justify-center p-1.5 rounded-md transition-colors shrink-0"
+          title="Toggle Navigation Menu"
         >
           <Menu size={20} />
         </button>
 
         {/* Dynamic Breadcrumbs */}
-        <div className="flex items-center gap-1.5 text-xs text-admin-text-secondary">
-          <span className="font-medium text-admin-text-muted">Admin</span>
+        <div className="hidden sm:flex items-center gap-1.5 text-xs text-admin-text-secondary truncate max-w-[200px] md:max-w-[400px] lg:max-w-[600px]">
+          <span className="font-medium text-admin-text-muted shrink-0">Admin</span>
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={idx}>
-              <ChevronRight size={14} className="text-admin-text-muted" />
+              <ChevronRight size={14} className="text-admin-text-muted shrink-0" />
               <span
-                className={
+                className={`truncate ${
                   idx === breadcrumbs.length - 1
                     ? 'font-semibold text-admin-text-primary'
                     : 'font-normal text-admin-text-secondary'
-                }
+                }`}
               >
                 {crumb}
               </span>
@@ -83,12 +80,12 @@ const Header = ({ collapsed, toggleSidebar }) => {
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         {/* Theme Toggle */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="relative w-9 h-9 rounded-full border border-admin-border bg-admin-card hover:bg-admin-subtle text-admin-text-secondary transition-all duration-200 cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 active:scale-95 focus:outline-none"
+          className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-admin-border bg-admin-card hover:bg-admin-subtle text-admin-text-secondary transition-all duration-200 cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 active:scale-95 focus:outline-none shrink-0"
           title={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
         >
           {isDark ? (
@@ -99,22 +96,22 @@ const Header = ({ collapsed, toggleSidebar }) => {
         </button>
 
         {/* User Info & Logout */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-admin-border">
-          <div className="w-8 h-8 rounded-full bg-admin-accent-light text-admin-accent flex items-center justify-center">
+        <div className="flex items-center gap-2 sm:gap-2.5 pl-2 border-l border-admin-border">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-admin-accent-light text-admin-accent flex items-center justify-center shrink-0">
             <User size={16} />
           </div>
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold text-admin-text-primary leading-tight">
+          <div className="hidden sm:flex flex-col">
+            <span className="text-xs font-semibold text-admin-text-primary leading-tight truncate max-w-[100px]">
               {user?.name || 'Admin'}
             </span>
-            <span className="text-[11px] text-admin-text-muted">
+            <span className="text-[11px] text-admin-text-muted truncate max-w-[100px]">
               {user?.role || 'Administrator'}
             </span>
           </div>
           <button
             type="button"
             onClick={handleOpenLogoutModal}
-            className="bg-transparent border-none text-admin-danger hover:opacity-80 cursor-pointer ml-1 p-1 flex items-center transition-opacity"
+            className="bg-transparent border-none text-admin-danger hover:opacity-80 cursor-pointer ml-1 p-1 flex items-center transition-opacity shrink-0"
             title="Logout"
           >
             <LogOut size={16} />

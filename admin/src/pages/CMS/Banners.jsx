@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { validateImageFile, IMAGE_SPECS, trimString, validateDropdown } from '../../utils/validation';
 
 const Banners = () => {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const limit = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [title, setTitle] = useState('');
@@ -211,8 +214,8 @@ const Banners = () => {
               {banners.length === 0 ? (
                 <tr><td colSpan="5" className="text-center text-admin-text-muted p-6">No banners uploaded yet</td></tr>
               ) : (
-                banners.map((b) => (
-                  <tr key={b._id}>
+                banners.slice((page - 1) * limit, page * limit).map((b, bIdx) => (
+                  <tr key={b._id || b.id || `ban-${bIdx}`}>
                     <td>
                       <div className="flex items-center gap-3">
                         <img src={b.image} alt="Banner" className="h-12 w-21 rounded-md object-cover border border-admin-border" />
@@ -230,13 +233,13 @@ const Banners = () => {
                         <input
                           type="checkbox"
                           checked={b.status === 'Active'}
-                          onChange={() => handleToggleStatus(b._id)}
+                          onChange={() => handleToggleStatus(b._id || b.id)}
                         />
                         <span className="slider"></span>
                       </label>
                     </td>
                     <td className="text-center">
-                      <button type="button" className="btn-danger p-1.5" onClick={() => handleDelete(b._id)}>
+                      <button type="button" className="btn-danger p-1.5" onClick={() => handleDelete(b._id || b.id)}>
                         <Trash2 size={15} />
                       </button>
                     </td>
@@ -246,6 +249,14 @@ const Banners = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(banners.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={banners.length}
+          limit={limit}
+        />
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setErrors({}); }} title="Add Banner">

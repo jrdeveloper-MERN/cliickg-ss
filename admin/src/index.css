@@ -19,8 +19,8 @@
   --border-color: #E5E7EB;
   --border-subtle: #F3F4F6;
 
-  --accent-primary: #3B82F6;
-  --accent-hover: #2563EB;
+  --accent-primary: #023C23;
+  --accent-hover: #012b19;
   --accent-light: #EEF2FF;
 
   --color-success: #10B981;
@@ -76,7 +76,6 @@ body {
   background-color: var(--bg-main);
   color: var(--text-primary);
   min-height: 100vh;
-  overflow-x: hidden;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   transition: background-color var(--transition-normal), color var(--transition-normal);
@@ -453,14 +452,14 @@ select.form-control option {
   background-color: white;
   transition: .2s;
   border-radius: 50%;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-input:checked + .slider {
+input:checked+.slider {
   background-color: var(--accent-primary);
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
   transform: translateX(16px);
 }
 
@@ -469,6 +468,7 @@ input:checked + .slider:before {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -478,6 +478,7 @@ input:checked + .slider:before {
   from {
     transform: translateX(100%);
   }
+
   to {
     transform: translateX(0);
   }
@@ -490,4 +491,3 @@ input:checked + .slider:before {
 .drawer-content {
   animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
+import Pagination from '../../components/Common/Pagination';
 import { Plus, Edit2, Trash2, Sliders, ChevronsRight, ArrowLeft } from 'lucide-react';
 
 const AttributeCaptions = () => {
@@ -9,6 +10,8 @@ const AttributeCaptions = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   // Caption Form Fields
   const [caption, setCaption] = useState('');
@@ -387,8 +390,8 @@ const AttributeCaptions = () => {
               ) : items.length === 0 ? (
                 <tr><td colSpan="5" className="text-center text-admin-text-muted p-6">No Attribute Captions found</td></tr>
               ) : (
-                items.map((item) => (
-                  <tr key={item._id}>
+                items.slice((page - 1) * limit, page * limit).map((item, cIdx) => (
+                  <tr key={item._id || item.id || `cap-${cIdx}`}>
                     <td>
                       {item.image ? (
                         <img
@@ -413,7 +416,7 @@ const AttributeCaptions = () => {
                         <input
                           type="checkbox"
                           checked={item.status === 'Active'}
-                          onChange={() => handleToggleStatus(item._id)}
+                          onChange={() => handleToggleStatus(item._id || item.id)}
                         />
                         <span className="slider"></span>
                       </label>
@@ -439,7 +442,7 @@ const AttributeCaptions = () => {
                         <button
                           type="button"
                           className="btn-ghost p-1.5 text-admin-danger"
-                          onClick={() => handleDelete(item._id)}
+                          onClick={() => handleDelete(item._id || item.id)}
                           title="Delete"
                         >
                           <Trash2 size={15} />
@@ -452,6 +455,14 @@ const AttributeCaptions = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(items.length / limit) || 1}
+          onPageChange={(p) => setPage(p)}
+          totalItems={items.length}
+          limit={limit}
+        />
       </div>
 
       {/* Edit / Create Caption Modal */}
