@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -7,29 +7,6 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 @Injectable()
 export class AddressesService {
   constructor(private readonly prisma: PrismaService) {}
-
-  private async syncCustomerDefaultAddress(userId: string, addressData: any) {
-    try {
-      const formattedAddress = `${addressData.addressLine1 || ''}, ${addressData.addressLine2 || ''}, ${addressData.area || ''}, ${addressData.city || ''}, ${addressData.state || ''} - ${addressData.pincode || ''}`;
-      const customer = await this.prisma.customer.findFirst({ where: { userId } });
-      if (customer) {
-        await this.prisma.customer.update({
-          where: { id: customer.id },
-          data: {
-            address1: addressData.addressLine1 || '',
-            address2: addressData.addressLine2 || '',
-            area: addressData.area || '',
-            landmark: addressData.landmark || '',
-            city: addressData.city || '',
-            state: addressData.state || 'TAMIL NADU',
-            pincode: addressData.pincode || '',
-          },
-        });
-      }
-    } catch (err) {
-      // Non-blocking sync error
-    }
-  }
 
   async getAddresses(userId: string) {
     const addresses = await this.prisma.address.findMany({
@@ -73,10 +50,6 @@ export class AddressesService {
       },
     });
 
-    if (shouldBeDefault) {
-      await this.syncCustomerDefaultAddress(userId, newAddress);
-    }
-
     return { success: true, data: newAddress };
   }
 
@@ -111,10 +84,6 @@ export class AddressesService {
       },
     });
 
-    if (shouldBeDefault) {
-      await this.syncCustomerDefaultAddress(userId, updated);
-    }
-
     return { success: true, data: updated };
   }
 
@@ -124,21 +93,6 @@ export class AddressesService {
     if (existing.userId !== userId) throw new ForbiddenException({ success: false, message: 'Unauthorized address deletion' });
 
     await this.prisma.address.delete({ where: { id: addressId } });
-
-    if (existing.isDefault) {
-      const firstRemaining = await this.prisma.address.findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (firstRemaining) {
-        const updated = await this.prisma.address.update({
-          where: { id: firstRemaining.id },
-          data: { isDefault: true },
-        });
-        await this.syncCustomerDefaultAddress(userId, updated);
-      }
-    }
 
     return { success: true, message: 'Address deleted successfully' };
   }
@@ -157,8 +111,6 @@ export class AddressesService {
       where: { id: addressId },
       data: { isDefault: true },
     });
-
-    await this.syncCustomerDefaultAddress(userId, updated);
 
     return { success: true, data: updated };
   }

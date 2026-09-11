@@ -166,15 +166,17 @@ export default function CheckoutPage() {
     area: '',
     landmark: '',
     city: '',
-    state: 'TAMIL NADU',
+    state: '',
     pincode: '',
     paymentMethod: 'ONLINE',
     remarks: '',
   });
+  const [sameAsBilling, setSameAsBilling] = useState(true);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [activeOrder, setActiveOrder] = useState<any>(null);
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [modalErrors, setModalErrors] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -186,52 +188,182 @@ export default function CheckoutPage() {
 
   const validateBillingForm = (): boolean => {
     const errors: Record<string, string> = {};
+    const nameRegex = /^[a-zA-Z\s.-]{2,50}$/;
+    const cityRegex = /^[a-zA-Z\s.-]{2,40}$/;
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const pincodeRegex = /^[1-9][0-9]{5}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!formData.name || !formData.name.trim()) {
+    // Recipient Name
+    const trimmedName = (formData.name || '').trim();
+    if (!trimmedName) {
       errors.name = 'Recipient Name is required.';
-    } else if (formData.name.trim().length < 2) {
+    } else if (trimmedName.length < 2) {
       errors.name = 'Recipient Name must be at least 2 characters.';
+    } else if (!nameRegex.test(trimmedName)) {
+      errors.name = 'Recipient Name should contain only letters and spaces.';
     }
 
-    const cleanPhone = String(formData.phone).replace(/\D/g, '');
-    if (!formData.phone || !cleanPhone) {
+    // Mobile Number
+    const rawPhone = String(formData.phone || '').trim();
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!rawPhone || !cleanPhone) {
       errors.phone = 'Mobile Number is required.';
     } else if (cleanPhone.length !== 10) {
-      errors.phone = 'Mobile Number must be a valid 10-digit number.';
+      errors.phone = 'Mobile Number must be exactly 10 digits.';
+    } else if (!phoneRegex.test(cleanPhone)) {
+      errors.phone = 'Please enter a valid 10-digit mobile number starting with 6-9.';
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email || !formData.email.trim()) {
+    // Email Address
+    const trimmedEmail = (formData.email || '').trim();
+    if (!trimmedEmail) {
       errors.email = 'Email Address is required.';
-    } else if (!emailRegex.test(formData.email.trim())) {
+    } else if (!emailRegex.test(trimmedEmail)) {
       errors.email = 'Please enter a valid email address.';
     }
 
-    if (!formData.address || !formData.address.trim()) {
+    // Flat / House No. / Building
+    const trimmedAddr1 = (formData.address || '').trim();
+    if (!trimmedAddr1) {
       errors.address = 'Flat / House No. / Building is required.';
+    } else if (trimmedAddr1.length < 2) {
+      errors.address = 'Flat / House No. must be at least 2 characters.';
     }
 
-    if (!formData.address2 || !formData.address2.trim()) {
+    // Street / Area / Colony
+    const trimmedAddr2 = (formData.address2 || '').trim();
+    if (!trimmedAddr2) {
       errors.address2 = 'Street / Area / Colony is required.';
+    } else if (trimmedAddr2.length < 3) {
+      errors.address2 = 'Street / Area / Colony must be at least 3 characters.';
     }
 
-    if (!formData.area || !formData.area.trim()) {
+    // Locality / Area
+    const trimmedArea = (formData.area || '').trim();
+    if (!trimmedArea) {
       errors.area = 'Locality / Area is required.';
+    } else if (trimmedArea.length < 2) {
+      errors.area = 'Locality / Area must be at least 2 characters.';
     }
 
-    if (!formData.city || !formData.city.trim()) {
+    // Landmark (Optional)
+    const trimmedLandmark = (formData.landmark || '').trim();
+    if (trimmedLandmark && trimmedLandmark.length < 2) {
+      errors.landmark = 'Landmark must be at least 2 characters if provided.';
+    }
+
+    // City
+    const trimmedCity = (formData.city || '').trim();
+    if (!trimmedCity) {
       errors.city = 'City is required.';
+    } else if (trimmedCity.length < 2) {
+      errors.city = 'City name must be at least 2 characters.';
+    } else if (!cityRegex.test(trimmedCity)) {
+      errors.city = 'City name should contain only letters.';
     }
 
-    if (!formData.state || !formData.state.trim()) {
-      errors.state = 'State is required.';
+    // State
+    const trimmedState = (formData.state || '').trim();
+    if (!trimmedState) {
+      errors.state = 'Please select a state from the dropdown.';
     }
 
-    if (!formData.pincode || !/^\d{6}$/.test(formData.pincode.trim())) {
-      errors.pincode = 'Pincode must be a valid 6-digit postal code.';
+    // Pincode
+    const trimmedPincode = (formData.pincode || '').trim();
+    if (!trimmedPincode) {
+      errors.pincode = 'Pincode is required.';
+    } else if (!pincodeRegex.test(trimmedPincode)) {
+      errors.pincode = 'Please enter a valid 6-digit Indian pincode (e.g. 600001).';
     }
 
     setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateModalForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    const nameRegex = /^[a-zA-Z\s.-]{2,50}$/;
+    const cityRegex = /^[a-zA-Z\s.-]{2,40}$/;
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const pincodeRegex = /^[1-9][0-9]{5}$/;
+
+    // Recipient Name
+    const trimmedName = (editingAddr.name || '').trim();
+    if (!trimmedName) {
+      errors.name = 'Recipient Name is required.';
+    } else if (trimmedName.length < 2) {
+      errors.name = 'Recipient Name must be at least 2 characters.';
+    } else if (!nameRegex.test(trimmedName)) {
+      errors.name = 'Recipient Name should contain only letters and spaces.';
+    }
+
+    // Mobile Number
+    const rawPhone = String(editingAddr.phone || '').trim();
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!rawPhone || !cleanPhone) {
+      errors.phone = 'Mobile Number is required.';
+    } else if (cleanPhone.length !== 10) {
+      errors.phone = 'Mobile Number must be exactly 10 digits.';
+    } else if (!phoneRegex.test(cleanPhone)) {
+      errors.phone = 'Please enter a valid 10-digit mobile number starting with 6-9.';
+    }
+
+    // Flat / House No. / Building
+    const trimmedAddr1 = (editingAddr.address || '').trim();
+    if (!trimmedAddr1) {
+      errors.address = 'Flat / House No. / Building is required.';
+    } else if (trimmedAddr1.length < 2) {
+      errors.address = 'Flat / House No. must be at least 2 characters.';
+    }
+
+    // Street / Area / Colony
+    const trimmedAddr2 = (editingAddr.address2 || '').trim();
+    if (!trimmedAddr2) {
+      errors.address2 = 'Street / Area / Colony is required.';
+    } else if (trimmedAddr2.length < 3) {
+      errors.address2 = 'Street / Area / Colony must be at least 3 characters.';
+    }
+
+    // Locality / Area
+    const trimmedArea = (editingAddr.area || '').trim();
+    if (!trimmedArea) {
+      errors.area = 'Locality / Area is required.';
+    } else if (trimmedArea.length < 2) {
+      errors.area = 'Locality / Area must be at least 2 characters.';
+    }
+
+    // Landmark (Optional)
+    const trimmedLandmark = (editingAddr.landmark || '').trim();
+    if (trimmedLandmark && trimmedLandmark.length < 2) {
+      errors.landmark = 'Landmark must be at least 2 characters if provided.';
+    }
+
+    // City
+    const trimmedCity = (editingAddr.city || '').trim();
+    if (!trimmedCity) {
+      errors.city = 'City is required.';
+    } else if (trimmedCity.length < 2) {
+      errors.city = 'City name must be at least 2 characters.';
+    } else if (!cityRegex.test(trimmedCity)) {
+      errors.city = 'City name should contain only letters.';
+    }
+
+    // State
+    const trimmedState = (editingAddr.state || '').trim();
+    if (!trimmedState) {
+      errors.state = 'Please select a state from the dropdown.';
+    }
+
+    // Pincode
+    const trimmedPincode = (editingAddr.pincode || '').trim();
+    if (!trimmedPincode) {
+      errors.pincode = 'Pincode is required.';
+    } else if (!pincodeRegex.test(trimmedPincode)) {
+      errors.pincode = 'Please enter a valid 6-digit Indian pincode (e.g. 600001).';
+    }
+
+    setModalErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
@@ -247,7 +379,7 @@ export default function CheckoutPage() {
     area: '',
     landmark: '',
     city: '',
-    state: 'TAMIL NADU',
+    state: '',
     pincode: '',
   });
 
@@ -312,23 +444,9 @@ export default function CheckoutPage() {
       let realAddresses: Address[] = addrList || [];
 
       if (customer && (customer.address1 || customer.address || customer.city || customer.pincode)) {
-        const custParts = (customer.address || '').split(',').map((s: string) => s.trim());
-        setFormData((prev) => ({
-          ...prev,
-          name: customer.name || user?.name || user?.fullName || '',
-          email: customer.email || user?.email || '',
-          phone: customer.phone || customer.mobileNumber || user?.mobileNumber || user?.phone || '',
-          address: customer.address1 || custParts[0] || '',
-          address2: customer.address2 || custParts[1] || '',
-          area: customer.area || custParts[2] || '',
-          landmark: customer.landmark || '',
-          city: customer.city || custParts[3] || '',
-          state: customer.state || 'TAMIL NADU',
-          pincode: customer.pincode || '',
-        }));
+        applyPrimaryCustomerAddress();
       } else if (realAddresses.length > 0) {
-        const primary = realAddresses.find((a: any) => a.isDefault || a.isPrimary) || realAddresses[0];
-        applyAddressToFormData(primary);
+        applyAddressToFormData(realAddresses[0]);
       } else if (user) {
         setFormData((prev) => ({
           ...prev,
@@ -341,6 +459,26 @@ export default function CheckoutPage() {
       setAddresses(realAddresses);
     } catch (err) {
       console.error('Failed to load initial checkout data:', err);
+    }
+  };
+
+  const applyPrimaryCustomerAddress = () => {
+    setSelectedAddressId('primary-customer');
+    if (customer && (customer.address1 || customer.address || customer.city || customer.pincode)) {
+      const custParts = (customer.address || '').split(',').map((s: string) => s.trim());
+      setFormData((prev) => ({
+        ...prev,
+        name: customer.name || user?.name || user?.fullName || '',
+        email: customer.email || user?.email || '',
+        phone: customer.phone || customer.mobileNumber || user?.mobileNumber || user?.phone || '',
+        address: customer.address1 || custParts[0] || '',
+        address2: customer.address2 || custParts[1] || '',
+        area: customer.area || custParts[2] || '',
+        landmark: customer.landmark || '',
+        city: customer.city || custParts[3] || '',
+        state: customer.state || '',
+        pincode: customer.pincode || '',
+      }));
     }
   };
 
@@ -357,9 +495,27 @@ export default function CheckoutPage() {
       area: addr.area || '',
       landmark: addr.landmark || '',
       city: addr.city || '',
-      state: addr.state || 'TAMIL NADU',
+      state: addr.state || '',
       pincode: addr.pincode || '',
     }));
+  };
+
+  const handleSameAsBillingToggle = (checked: boolean) => {
+    setSameAsBilling(checked);
+    if (checked) {
+      if (selectedAddressId === 'primary-customer') {
+        applyPrimaryCustomerAddress();
+      } else {
+        const found = addresses.find((a: any) => String(a.id || a._id) === selectedAddressId);
+        if (found) {
+          applyAddressToFormData(found);
+        } else if (customer && (customer.address1 || customer.address || customer.city)) {
+          applyPrimaryCustomerAddress();
+        } else if (addresses.length > 0) {
+          applyAddressToFormData(addresses[0]);
+        }
+      }
+    }
   };
 
   useEffect(() => {
@@ -502,6 +658,7 @@ export default function CheckoutPage() {
 
   const handleOpenAddModal = () => {
     setIsNewAddress(true);
+    setModalErrors({});
     setEditingAddr({
       id: '',
       name: user?.name || user?.fullName || customer?.name || customer?.fullName || '',
@@ -512,16 +669,22 @@ export default function CheckoutPage() {
       area: '',
       landmark: '',
       city: '',
-      state: 'TAMIL NADU',
+      state: '',
       pincode: '',
     });
     setIsEditModalOpen(true);
   };
 
   const handleOpenEditModal = (addr: any) => {
+    const targetId = String(addr.id || addr._id || '');
+    if (targetId === 'primary-customer' || targetId === 'profile-primary') {
+      showToast('Primary profile address can only be edited on your Profile page.', 'info');
+      return;
+    }
     setIsNewAddress(false);
+    setModalErrors({});
     setEditingAddr({
-      id: String(addr.id || addr._id || ''),
+      id: targetId,
       name: addr.name || addr.fullName || '',
       phone: addr.phone || addr.mobile || '',
       email: addr.email || '',
@@ -530,7 +693,7 @@ export default function CheckoutPage() {
       area: addr.area || '',
       landmark: addr.landmark || '',
       city: addr.city || '',
-      state: addr.state || 'TAMIL NADU',
+      state: addr.state || '',
       pincode: addr.pincode || '',
     });
     setIsEditModalOpen(true);
@@ -538,30 +701,31 @@ export default function CheckoutPage() {
 
   const handleModalSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAddr.name || !editingAddr.phone || !editingAddr.address || !editingAddr.city || !editingAddr.state || !editingAddr.pincode) {
-      alert('Please fill out all required address fields.');
+
+    if (!validateModalForm()) {
+      showToast('Please fill out all required address fields correctly.', 'error');
       return;
     }
 
     try {
       const payload = {
-        name: editingAddr.name,
-        phone: editingAddr.phone,
-        email: editingAddr.email,
-        addressLine1: editingAddr.address,
-        addressLine2: editingAddr.address2,
-        area: editingAddr.area,
-        landmark: editingAddr.landmark,
-        city: editingAddr.city,
-        state: editingAddr.state,
-        pincode: editingAddr.pincode,
+        name: editingAddr.name.trim(),
+        phone: editingAddr.phone.trim(),
+        email: editingAddr.email.trim(),
+        addressLine1: editingAddr.address.trim(),
+        addressLine2: editingAddr.address2.trim(),
+        area: editingAddr.area.trim(),
+        landmark: editingAddr.landmark.trim(),
+        city: editingAddr.city.trim(),
+        state: editingAddr.state.trim(),
+        pincode: editingAddr.pincode.trim(),
       };
 
       if (isNewAddress || !editingAddr.id) {
         const created = await addressService.createAddress({ ...payload, isDefault: addresses.length === 0 });
         setAddresses((prev) => [...prev, created]);
         applyAddressToFormData(created);
-        alert('New delivery address saved to Address Book.');
+        showToast('New delivery address saved to Address Book.', 'success');
       } else {
         const updated = await addressService.updateAddress(editingAddr.id, payload);
         setAddresses((prev) =>
@@ -570,18 +734,18 @@ export default function CheckoutPage() {
         if (selectedAddressId === editingAddr.id) {
           applyAddressToFormData(updated);
         }
-        alert('Delivery address updated.');
+        showToast('Delivery address updated successfully.', 'success');
       }
       setIsEditModalOpen(false);
     } catch (err: any) {
       console.error('Modal address save error:', err);
-      alert(err.message || 'Failed to save address details.');
+      showToast(err.message || 'Failed to save address details.', 'error');
     }
   };
 
   const handleDeleteAddress = (id: string) => {
     if (id === 'profile-primary' || (customer && (id === customer.id || id === customer._id))) {
-      alert('Primary default profile address from customer record cannot be deleted.');
+      showToast('Primary profile address cannot be deleted.', 'info');
       return;
     }
     setDeletingAddressId(id);
@@ -599,10 +763,10 @@ export default function CheckoutPage() {
         return filtered;
       });
       setDeletingAddressId(null);
-      alert('Address deleted successfully.');
+      showToast('Address deleted successfully.', 'success');
     } catch (err: any) {
       console.error('Delete address error:', err);
-      alert(err.message || 'Failed to delete address.');
+      showToast(err.message || 'Failed to delete address.', 'error');
     }
   };
 
@@ -800,7 +964,7 @@ export default function CheckoutPage() {
       if (isOrderNonRetryable) {
         setActiveOrder(null);
       }
-      alert(err.message || 'Failed to place order. Please try again.');
+      showToast(err.message || 'Failed to place order. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -877,9 +1041,8 @@ export default function CheckoutPage() {
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div
-          className={`fixed top-6 right-6 z-[99999] text-white py-3 px-5 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-3 animate-drawer-fade ${
-            toastMessage.type === 'success' ? 'bg-emerald-600' : toastMessage.type === 'error' ? 'bg-rose-600' : 'bg-blue-600'
-          }`}
+          className={`fixed top-6 right-6 z-[99999] text-white py-3 px-5 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-3 animate-drawer-fade ${toastMessage.type === 'success' ? 'bg-emerald-600' : toastMessage.type === 'error' ? 'bg-rose-600' : 'bg-blue-600'
+            }`}
         >
           <span>{toastMessage.text}</span>
           <button
@@ -893,222 +1056,454 @@ export default function CheckoutPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-10 items-start">
-        {/* Left Column: Billing Details & Saved Addresses */}
+        {/* Left Column: Delivery Address Selection & Billing Details */}
         <div className="flex flex-col gap-8">
           {/* Billing Details Card */}
-          <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-slate-800 m-0 pb-2 border-b-2 border-primary inline-block">
-                Billing & Shipping Details
-              </h3>
-              <span className="text-[0.72rem] text-primary bg-rose-50 py-1 px-2.5 rounded-md font-bold border border-rose-200">
-                Primary Default
+          {(() => {
+            const isPrimarySelected = selectedAddressId === 'primary-customer' || selectedAddressId === 'profile-primary';
+
+            return (
+              <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-lg font-bold text-slate-800 m-0 pb-2 border-b-2 border-primary inline-block">
+                    Billing & Shipping Details
+                  </h3>
+                  <span className={`text-[0.72rem] py-1 px-2.5 rounded-md font-bold border ${
+                    isPrimarySelected
+                      ? 'text-amber-800 bg-amber-50 border-amber-200'
+                      : 'text-primary bg-rose-50 border-rose-200'
+                  }`}>
+                    {isPrimarySelected ? 'Primary Address' : 'Editable Saved Address'}
+                  </span>
+                </div>
+
+                {isPrimarySelected && (
+                  <div className="mb-5 p-3 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900 text-xs flex items-center justify-between gap-3 animate-drawer-fade">
+                    <div className="flex items-center gap-2">
+                      <Lock size={14} className="text-amber-700 shrink-0" />
+                      <span>
+                        Primary Profile address is <strong>Read-Only</strong> in checkout. To make changes, please update your profile on the{' '}
+                        <a href="/profile" className="font-bold underline text-amber-950 hover:text-primary">
+                          Profile Page
+                        </a>.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Recipient Name *</label>
+                    <input
+                      type="text"
+                      name="name"
+                      readOnly={isPrimarySelected}
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.name ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.name && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.name}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Mobile Number *</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      maxLength={10}
+                      readOnly={isPrimarySelected}
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      placeholder="10-digit mobile number"
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.phone ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.phone && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.phone}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Email Address *</label>
+                    <input
+                      type="email"
+                      name="email"
+                      readOnly={isPrimarySelected}
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.email ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.email && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.email}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Flat / House No. / Building *</label>
+                    <input
+                      type="text"
+                      name="address"
+                      readOnly={isPrimarySelected}
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.address ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.address && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.address}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Street / Area / Colony *</label>
+                    <input
+                      type="text"
+                      name="address2"
+                      readOnly={isPrimarySelected}
+                      value={formData.address2}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.address2 ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.address2 && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.address2}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Locality / Area *</label>
+                    <input
+                      type="text"
+                      name="area"
+                      readOnly={isPrimarySelected}
+                      value={formData.area}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.area ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.area && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.area}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Landmark (Optional)</label>
+                    <input
+                      type="text"
+                      name="landmark"
+                      readOnly={isPrimarySelected}
+                      value={formData.landmark}
+                      onChange={handleInputChange}
+                      placeholder="e.g. Near City Center Mall"
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">City *</label>
+                    <input
+                      type="text"
+                      name="city"
+                      readOnly={isPrimarySelected}
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.city ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.city && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.city}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">State *</label>
+                    <select
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      disabled={isPrimarySelected}
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.state ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    >
+                      <option value="" disabled>Select State</option>
+                      {INDIAN_STATES.map((st) => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
+                    {formErrors.state && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.state}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Pincode *</label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      maxLength={6}
+                      readOnly={isPrimarySelected}
+                      value={formData.pincode}
+                      onChange={handleInputChange}
+                      placeholder="6-digit pincode"
+                      className={`w-full py-2.5 px-3 rounded-md text-sm outline-none border transition-colors ${
+                        isPrimarySelected
+                          ? 'bg-slate-100/80 text-slate-600 border-slate-200 cursor-not-allowed font-medium'
+                          : formErrors.pincode ? 'border-rose-600 bg-white' : 'border-slate-300 focus:border-primary bg-white'
+                      }`}
+                    />
+                    {formErrors.pincode && (
+                      <span className="text-rose-600 text-xs mt-1 block font-semibold">
+                        {formErrors.pincode}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!isPrimarySelected && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleUpdateBillingAddress}
+                      className="bg-primary hover:bg-primary-hover text-white border-none py-2.5 px-8 rounded-lg font-bold text-sm cursor-pointer transition-colors"
+                    >
+                      Update Saved Details
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Saved Delivery Address Selector Card */}
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-serif text-slate-900 font-normal tracking-tight m-0 pb-1">
+                  Delivery Address
+                </h3>
+                <p className="text-xs text-slate-500 font-medium m-0">
+                  Select a delivery location for your order
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenAddModal}
+                className="bg-[#0f4c3a] hover:bg-[#093528] text-white py-2 px-4 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border-none flex items-center gap-1.5 shrink-0"
+              >
+                <Plus size={14} /> Add New Address
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between mt-6 mb-3">
+              <span className="text-[0.7rem] font-extrabold tracking-wider text-slate-400 uppercase">
+                PRIMARY ADDRESS
+              </span>
+              <span className="text-[#0f4c3a] text-xs font-bold flex items-center gap-1">
+                <Lock size={12} className="text-[#0f4c3a]" /> Default Delivery
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Recipient Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.name ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.name && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.name}
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Mobile Number *</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  required
-                  maxLength={10}
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  placeholder="10-digit mobile number"
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.phone ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.phone && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.phone}
-                  </span>
-                )}
-              </div>
+            <div className="flex flex-col gap-3">
+              {/* Option A: Primary Profile Address (Customer table) */}
+              {customer && (customer.address1 || customer.address || customer.city || customer.pincode) && (() => {
+                const isSelected = selectedAddressId === 'primary-customer';
+                const formattedAddrStr = [
+                  customer.address1 || (customer.address || '').split(',')[0],
+                  customer.address2,
+                  customer.area,
+                  customer.landmark ? `(Landmark: ${customer.landmark})` : '',
+                  customer.city,
+                  customer.state || '',
+                  customer.pincode ? `- ${customer.pincode}` : ''
+                ].filter(Boolean).join(', ');
+                const phoneStr = customer.phone || user?.mobileNumber || user?.phone || '';
+
+                return (
+                  <div
+                    key="primary-customer"
+                    onClick={applyPrimaryCustomerAddress}
+                    className={`p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col justify-between ${isSelected
+                        ? 'border-2 border-[#0f4c3a] bg-emerald-50/10 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-[#0f4c3a] bg-white' : 'border-slate-300 bg-white'
+                              }`}
+                          >
+                            {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-[#0f4c3a]" />}
+                          </div>
+                          <span className="font-bold text-sm sm:text-base text-slate-900">
+                            {customer.name || user?.name || 'Test User'}
+                          </span>
+                          <span className="text-[0.65rem] bg-rose-100/90 text-rose-600 font-bold px-2 py-0.5 rounded uppercase tracking-wider border border-rose-200/50">
+                            PRIMARY PROFILE
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed mb-2.5 pl-7">
+                        {formattedAddrStr}
+                      </p>
+
+                      {phoneStr && (
+                        <p className="text-xs sm:text-sm text-slate-600 font-medium flex items-center gap-1.5 pl-7 mb-0">
+                          <Phone size={13} className="text-slate-500 shrink-0" />
+                          <span>{phoneStr.startsWith('+') ? phoneStr : `+91 ${phoneStr}`}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Option B: Additional Saved Addresses (Address table) */}
+              {addresses.map((addr: any) => {
+                const aId = String(addr.id || addr._id || '');
+                const isSelected = selectedAddressId === aId;
+                const formattedAddrStr = [
+                  addr.addressLine1 || addr.address,
+                  addr.addressLine2 || addr.address2,
+                  addr.area,
+                  addr.landmark ? `(Landmark: ${addr.landmark})` : '',
+                  addr.city,
+                  addr.state,
+                  addr.pincode ? `- ${addr.pincode}` : ''
+                ].filter(Boolean).join(', ');
+                const phoneStr = addr.phone || addr.mobile || '';
+
+                return (
+                  <div
+                    key={aId}
+                    onClick={() => applyAddressToFormData(addr)}
+                    className={`p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col justify-between ${isSelected
+                        ? 'border-2 border-[#0f4c3a] bg-emerald-50/10 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-[#0f4c3a] bg-white' : 'border-slate-300 bg-white'
+                              }`}
+                          >
+                            {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-[#0f4c3a]" />}
+                          </div>
+                          <span className="font-bold text-sm sm:text-base text-slate-900">
+                            {addr.name || addr.fullName || 'Recipient'}
+                          </span>
+                          <span className="text-[0.65rem] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded uppercase tracking-wider border border-slate-200">
+                            SAVED ADDRESS
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditModal(addr);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer bg-white flex items-center justify-center"
+                            title="Edit Address"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAddress(aId);
+                            }}
+                            className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 border border-rose-100 rounded-lg transition-colors cursor-pointer bg-white flex items-center justify-center"
+                            title="Delete Address"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed mb-2.5 pl-7">
+                        {formattedAddrStr}
+                      </p>
+
+                      {phoneStr && (
+                        <p className="text-xs sm:text-sm text-slate-600 font-medium flex items-center gap-1.5 pl-7 mb-0">
+                          <Phone size={13} className="text-slate-500 shrink-0" />
+                          <span>{phoneStr.startsWith('+') ? phoneStr : `+91 ${phoneStr}`}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Email Address *</label>
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
                 <input
-                  type="email"
-                  name="email"
-                  required
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.email ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
+                  type="checkbox"
+                  checked={sameAsBilling}
+                  onChange={(e) => handleSameAsBillingToggle(e.target.checked)}
+                  className="accent-[#0f4c3a] w-4 h-4 cursor-pointer"
                 />
-                {formErrors.email && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.email}
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Flat / House No. / Building *</label>
-                <input
-                  type="text"
-                  name="address"
-                  required
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.address ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.address && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.address}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Street / Area / Colony *</label>
-                <input
-                  type="text"
-                  name="address2"
-                  required
-                  value={formData.address2}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.address2 ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.address2 && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.address2}
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Locality / Area *</label>
-                <input
-                  type="text"
-                  name="area"
-                  required
-                  value={formData.area}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.area ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.area && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.area}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Landmark (Optional)</label>
-                <input
-                  type="text"
-                  name="landmark"
-                  value={formData.landmark}
-                  onChange={handleInputChange}
-                  placeholder="e.g. Near City Center Mall"
-                  className="w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border border-slate-300 focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">City *</label>
-                <input
-                  type="text"
-                  name="city"
-                  required
-                  value={formData.city}
-                  onChange={handleInputChange}
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.city ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.city && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.city}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">State *</label>
-                <select
-                  name="state"
-                  value={formData.state}
-                  onChange={handleInputChange}
-                  required
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.state ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                >
-                  {INDIAN_STATES.map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
-                {formErrors.state && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.state}
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Pincode *</label>
-                <input
-                  type="text"
-                  name="pincode"
-                  required
-                  maxLength={6}
-                  value={formData.pincode}
-                  onChange={handleInputChange}
-                  placeholder="6-digit pincode"
-                  className={`w-full py-2.5 px-3 rounded-md text-sm outline-none text-slate-800 bg-white border ${
-                    formErrors.pincode ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
-                  }`}
-                />
-                {formErrors.pincode && (
-                  <span className="text-rose-600 text-xs mt-1 block font-semibold">
-                    {formErrors.pincode}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleUpdateBillingAddress}
-                className="bg-primary hover:bg-primary-hover text-white border-none py-2.5 px-8 rounded-lg font-bold text-sm cursor-pointer transition-colors"
-              >
-                Update Saved Details
-              </button>
+                Billing address is the same as delivery address
+              </label>
             </div>
           </div>
 
@@ -1259,11 +1654,10 @@ export default function CheckoutPage() {
                       return (
                         <label
                           key={type || `speed-${idx}`}
-                          className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
-                            isSelected
+                          className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border ${isSelected
                               ? 'border-2 border-slate-900 bg-slate-50 shadow-sm'
                               : 'border-slate-200 bg-white hover:border-slate-300'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3 flex-1">
                             <input
@@ -1387,27 +1781,48 @@ export default function CheckoutPage() {
               </button>
             </div>
 
-            <form onSubmit={handleModalSave} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleModalSave} noValidate className="p-6 flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Recipient Name *</label>
                   <input
                     type="text"
                     value={editingAddr.name}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, name: e.target.value })}
-                    required
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    onChange={(e) => {
+                      setEditingAddr({ ...editingAddr, name: e.target.value });
+                      if (modalErrors.name) setModalErrors((prev) => ({ ...prev, name: '' }));
+                    }}
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.name ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   />
+                  {modalErrors.name && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.name}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Mobile Number *</label>
                   <input
                     type="text"
+                    maxLength={10}
                     value={editingAddr.phone}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, phone: e.target.value })}
-                    required
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditingAddr({ ...editingAddr, phone: clean });
+                      if (modalErrors.phone) setModalErrors((prev) => ({ ...prev, phone: '' }));
+                    }}
+                    placeholder="10-digit mobile number"
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.phone ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   />
+                  {modalErrors.phone && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.phone}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1416,10 +1831,19 @@ export default function CheckoutPage() {
                 <input
                   type="text"
                   value={editingAddr.address}
-                  onChange={(e) => setEditingAddr({ ...editingAddr, address: e.target.value })}
-                  required
-                  className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                  onChange={(e) => {
+                    setEditingAddr({ ...editingAddr, address: e.target.value });
+                    if (modalErrors.address) setModalErrors((prev) => ({ ...prev, address: '' }));
+                  }}
+                  className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                    modalErrors.address ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                  }`}
                 />
+                {modalErrors.address && (
+                  <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                    {modalErrors.address}
+                  </span>
+                )}
               </div>
 
               <div>
@@ -1427,10 +1851,19 @@ export default function CheckoutPage() {
                 <input
                   type="text"
                   value={editingAddr.address2}
-                  onChange={(e) => setEditingAddr({ ...editingAddr, address2: e.target.value })}
-                  required
-                  className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                  onChange={(e) => {
+                    setEditingAddr({ ...editingAddr, address2: e.target.value });
+                    if (modalErrors.address2) setModalErrors((prev) => ({ ...prev, address2: '' }));
+                  }}
+                  className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                    modalErrors.address2 ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                  }`}
                 />
+                {modalErrors.address2 && (
+                  <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                    {modalErrors.address2}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1439,10 +1872,19 @@ export default function CheckoutPage() {
                   <input
                     type="text"
                     value={editingAddr.area}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, area: e.target.value })}
-                    required
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    onChange={(e) => {
+                      setEditingAddr({ ...editingAddr, area: e.target.value });
+                      if (modalErrors.area) setModalErrors((prev) => ({ ...prev, area: '' }));
+                    }}
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.area ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   />
+                  {modalErrors.area && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.area}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Landmark (Optional)</label>
@@ -1462,34 +1904,64 @@ export default function CheckoutPage() {
                   <input
                     type="text"
                     value={editingAddr.city}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, city: e.target.value })}
-                    required
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    onChange={(e) => {
+                      setEditingAddr({ ...editingAddr, city: e.target.value });
+                      if (modalErrors.city) setModalErrors((prev) => ({ ...prev, city: '' }));
+                    }}
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.city ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   />
+                  {modalErrors.city && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.city}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">State *</label>
                   <select
                     value={editingAddr.state}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, state: e.target.value })}
-                    required
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    onChange={(e) => {
+                      setEditingAddr({ ...editingAddr, state: e.target.value });
+                      if (modalErrors.state) setModalErrors((prev) => ({ ...prev, state: '' }));
+                    }}
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.state ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   >
+                    <option value="" disabled>Select State</option>
                     {INDIAN_STATES.map((st) => (
                       <option key={st} value={st}>{st}</option>
                     ))}
                   </select>
+                  {modalErrors.state && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.state}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">Pincode *</label>
                   <input
                     type="text"
                     value={editingAddr.pincode}
-                    onChange={(e) => setEditingAddr({ ...editingAddr, pincode: e.target.value })}
-                    required
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setEditingAddr({ ...editingAddr, pincode: clean });
+                      if (modalErrors.pincode) setModalErrors((prev) => ({ ...prev, pincode: '' }));
+                    }}
                     maxLength={6}
-                    className="w-full py-2 px-3 rounded-md border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:border-primary"
+                    placeholder="6-digit pincode"
+                    className={`w-full py-2 px-3 rounded-md border text-xs text-slate-800 bg-white outline-none ${
+                      modalErrors.pincode ? 'border-rose-600' : 'border-slate-300 focus:border-primary'
+                    }`}
                   />
+                  {modalErrors.pincode && (
+                    <span className="text-rose-600 text-[0.7rem] mt-1 block font-semibold">
+                      {modalErrors.pincode}
+                    </span>
+                  )}
                 </div>
               </div>
 

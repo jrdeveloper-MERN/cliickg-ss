@@ -6,6 +6,16 @@ import Modal from '../../components/Common/Modal';
 import * as XLSX from 'xlsx';
 import { Search, Download, Filter, RefreshCw, Plus, Edit2, Trash2, UserX, UserCheck } from 'lucide-react';
 
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
+  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
+  'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh',
+  'Lakshadweep', 'Puducherry'
+];
+
 const CustomerList = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,8 +35,15 @@ const CustomerList = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [address1, setAddress1] = useState('');
+  const [address2, setAddress2] = useState('');
+  const [area, setArea] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pincode, setPincode] = useState('');
   const [custStatus, setCustStatus] = useState('ACTIVE');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const { showToast } = useToast();
 
@@ -70,40 +87,90 @@ const CustomerList = () => {
   };
 
   const handleOpenModal = (customer = null) => {
+    setFieldErrors({});
     if (customer) {
       const targetId = customer.id || customer._id;
       setEditingId(targetId);
       setName(customer.name || '');
       setEmail(customer.email || '');
       setPhone(customer.phone || customer.mobileNumber || '');
-      setAddress(customer.address || '');
+      setAddress1(customer.address1 || (customer.address || '').split(',')[0] || '');
+      setAddress2(customer.address2 || '');
+      setArea(customer.area || '');
+      setLandmark(customer.landmark || '');
+      setCity(customer.city || '');
+      setState(customer.state || '');
+      setPincode(customer.pincode || '');
       setCustStatus(customer.accountStatus || (customer.status === 'Disabled' ? 'DISABLED' : 'ACTIVE'));
     } else {
       setEditingId(null);
       setName('');
       setEmail('');
       setPhone('');
-      setAddress('');
+      setAddress1('');
+      setAddress2('');
+      setArea('');
+      setLandmark('');
+      setCity('');
+      setState('');
+      setPincode('');
       setCustStatus('ACTIVE');
     }
     setIsModalOpen(true);
   };
 
-  const handleSaveCustomer = async (e) => {
-    e.preventDefault();
-    if (!name || !email || !phone) {
-      showToast('Name, Email, and Phone number are required', 'error');
-      return;
+  const validateForm = () => {
+    const errors = {};
+    if (!name.trim()) {
+      errors.name = 'Customer name is required.';
     }
 
+    if (!email.trim()) {
+      errors.email = 'Email address is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = 'Please enter a valid email address.';
+    }
+
+    if (!editingId) {
+      if (!phone.trim()) {
+        errors.phone = 'Mobile number is required.';
+      } else {
+        const cleanDigits = phone.replace(/\D/g, '');
+        if (!/^[6-9]\d{9}$/.test(cleanDigits)) {
+          errors.phone = 'Please enter a valid 10-digit Indian mobile number (must start with 6, 7, 8, or 9).';
+        }
+      }
+    }
+
+    if (pincode && pincode.trim() && !/^[1-9][0-9]{5}$/.test(pincode.trim())) {
+      errors.pincode = 'Please enter a valid 6-digit Indian pincode.';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSaveCustomer = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
     const payload = {
-      name,
+      name: name.trim(),
       email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      address,
+      address1: address1.trim(),
+      address2: address2.trim(),
+      area: area.trim(),
+      landmark: landmark.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
       accountStatus: custStatus,
       status: custStatus === 'DISABLED' ? 'Disabled' : 'Active'
     };
+
+    if (!editingId) {
+      payload.phone = phone.trim();
+    }
 
     try {
       if (editingId) {
@@ -117,7 +184,7 @@ const CustomerList = () => {
       }
       setIsModalOpen(false);
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to save customer', 'error');
+      showToast(err.response?.data?.message || err.appError?.userMessage || 'Failed to save customer', 'error');
     }
   };
 
@@ -289,8 +356,8 @@ const CustomerList = () => {
                       <td className="font-semibold text-admin-text-primary">{c.name}</td>
                       <td>{c.email}</td>
                       <td>{c.phone || c.mobileNumber}</td>
-                      <td className="max-w-[240px] truncate">
-                        {c.address || 'N/A'}
+                      <td className="max-w-[240px] truncate" title={[c.address1 || c.address, c.address2, c.area, c.city, c.state, c.pincode].filter(Boolean).join(', ')}>
+                        {[c.address1 || c.address, c.address2, c.area, c.city, c.state, c.pincode].filter(Boolean).join(', ') || 'N/A'}
                       </td>
                       <td>{renderStatusBadge(c)}</td>
                       <td>{new Date(c.joinedDate || c.createdAt).toLocaleDateString()}</td>
@@ -357,25 +424,143 @@ const CustomerList = () => {
 
       {/* Edit / Add Customer Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Edit Customer' : 'Add New Customer'}>
-        <form onSubmit={handleSaveCustomer} className="flex flex-col gap-5">
+        <form onSubmit={handleSaveCustomer} noValidate className="flex flex-col gap-5">
           <div>
             <label className="form-label">Customer Name *</label>
-            <input type="text" className="form-control" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Name" required />
+            <input
+              type="text"
+              className={`form-control ${fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : ''}`}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: '' }));
+              }}
+              placeholder="e.g. Name"
+            />
+            {fieldErrors.name && (
+              <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block font-medium">
+                {fieldErrors.name}
+              </span>
+            )}
           </div>
 
           <div>
             <label className="form-label">Email Address *</label>
-            <input type="email" className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="demo@example.com" required />
+            <input
+              type="text"
+              className={`form-control ${fieldErrors.email ? 'border-rose-500 focus:border-rose-500' : ''}`}
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: '' }));
+              }}
+              placeholder="demo@example.com"
+            />
+            {fieldErrors.email && (
+              <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block font-medium">
+                {fieldErrors.email}
+              </span>
+            )}
           </div>
 
           <div>
-            <label className="form-label">Mobile / Phone Number *</label>
-            <input type="text" className="form-control" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543211" required />
+            <label className="form-label">
+              Mobile / Phone Number * {editingId && <span className="text-xs text-admin-text-muted font-normal">(Read-only)</span>}
+            </label>
+            <input
+              type="text"
+              className={`form-control ${editingId ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed' : ''} ${fieldErrors.phone ? 'border-rose-500 focus:border-rose-500' : ''}`}
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (fieldErrors.phone) setFieldErrors((prev) => ({ ...prev, phone: '' }));
+              }}
+              placeholder="9876543211"
+              readOnly={Boolean(editingId)}
+              disabled={Boolean(editingId)}
+            />
+            {fieldErrors.phone && (
+              <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block font-medium">
+                {fieldErrors.phone}
+              </span>
+            )}
           </div>
 
-          <div>
-            <label className="form-label">Address</label>
-            <textarea className="form-control" rows="3" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full street address..." />
+          <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mt-2 flex flex-col gap-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Primary Customer Profile Address</h4>
+
+            <div>
+              <label className="form-label">Address Line 1 / House / Flat No.</label>
+              <input type="text" className="form-control" value={address1} onChange={(e) => setAddress1(e.target.value)} placeholder="House/Flat No., Building Name..." />
+            </div>
+
+            <div>
+              <label className="form-label">Address Line 2 / Street</label>
+              <input type="text" className="form-control" value={address2} onChange={(e) => setAddress2(e.target.value)} placeholder="Street, Colony, Main Road..." />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="form-label">Locality / Area</label>
+                <input type="text" className="form-control" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Locality or Area name..." />
+              </div>
+
+              <div>
+                <label className="form-label">Landmark</label>
+                <input type="text" className="form-control" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Nearby landmark..." />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="form-label">City / District</label>
+                <input type="text" className="form-control" value={city} onChange={(e) => setCity(e.target.value)} placeholder="City / District" />
+              </div>
+
+              <div>
+                <label className="form-label">State</label>
+                <select
+                  className={`form-control ${fieldErrors.state ? 'border-rose-500 focus:border-rose-500' : ''}`}
+                  value={state}
+                  onChange={(e) => {
+                    setState(e.target.value);
+                    if (fieldErrors.state) setFieldErrors((prev) => ({ ...prev, state: '' }));
+                  }}
+                >
+                  <option value="">Select State</option>
+                  {INDIAN_STATES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.state && (
+                  <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block font-medium">
+                    {fieldErrors.state}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="form-label">Pincode</label>
+                <input
+                  type="text"
+                  className={`form-control ${fieldErrors.pincode ? 'border-rose-500 focus:border-rose-500' : ''}`}
+                  value={pincode}
+                  onChange={(e) => {
+                    setPincode(e.target.value);
+                    if (fieldErrors.pincode) setFieldErrors((prev) => ({ ...prev, pincode: '' }));
+                  }}
+                  placeholder="6-digit pincode"
+                  maxLength={6}
+                />
+                {fieldErrors.pincode && (
+                  <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block font-medium">
+                    {fieldErrors.pincode}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
           <div>

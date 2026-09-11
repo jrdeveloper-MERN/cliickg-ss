@@ -143,10 +143,16 @@ export const FeaturedSection: React.FC = () => {
             {isCarousel ? (
               <Carousel itemsPerView={getItemsPerView(section.gridType)} autoSwipe={true} autoSwipeInterval={3000}>
                 {items.map((item: any, idx: number) => {
+                  const sectionTargetType =
+                    section.type === 'main_category' ? 'MainCategory' :
+                    section.type === 'category' ? 'Category' :
+                    section.type === 'sub_category' ? 'SubCategory' :
+                    section.type;
                   const itemTargetUrl = computeCmsTargetUrl({
                     linkUrl: item.linkUrl,
-                    linkType: item.linkType || section.type || section.selectType,
+                    linkType: item.linkType || sectionTargetType || section.selectType,
                     linkId: item.linkId || item.name,
+                    type: item.linkType || sectionTargetType || section.selectType,
                     id: item.linkId || item.name,
                     name: item.name,
                   });
@@ -189,10 +195,16 @@ export const FeaturedSection: React.FC = () => {
             ) : (
               <div className={gridClasses}>
                 {items.map((item: any, idx: number) => {
+                  const sectionTargetType =
+                    section.type === 'main_category' ? 'MainCategory' :
+                    section.type === 'category' ? 'Category' :
+                    section.type === 'sub_category' ? 'SubCategory' :
+                    section.type;
                   const itemTargetUrl = computeCmsTargetUrl({
                     linkUrl: item.linkUrl,
-                    linkType: item.linkType || section.type || section.selectType,
+                    linkType: item.linkType || sectionTargetType || section.selectType,
                     linkId: item.linkId || item.name,
+                    type: item.linkType || sectionTargetType || section.selectType,
                     id: item.linkId || item.name,
                     name: item.name,
                   });

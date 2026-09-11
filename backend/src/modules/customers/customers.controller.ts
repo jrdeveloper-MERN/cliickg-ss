@@ -80,7 +80,7 @@ export class CustomersController {
     if (!isAdmin && !isOwner) {
       throw new ForbiddenException({ message: 'Unauthorized profile update request' });
     }
-    return this.customersService.update(customer.id, dto);
+    return this.customersService.update(customer.id, dto, isAdmin);
   }
 
   @Patch(':id/status')

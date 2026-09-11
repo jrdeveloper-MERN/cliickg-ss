@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import './globals.css';
 import AppProviders from '../providers/AppProviders';
@@ -30,7 +31,9 @@ export default function RootLayout({
           <OfflineBanner />
           <ServerHealthGuard>
             <ScrollToTop />
-            <Header />
+            <Suspense fallback={null}>
+              <Header />
+            </Suspense>
             <main className="min-h-[80vh]">{children}</main>
             <Footer />
           </ServerHealthGuard>

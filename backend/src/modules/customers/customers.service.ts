@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
+import { normalizePhoneNumber } from '../../common/utils/phone.util';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
@@ -137,7 +138,15 @@ export class CustomersService {
 
   async create(dto: CreateCustomerDto) {
     const cleanEmail = dto.email && String(dto.email).trim() ? String(dto.email).trim().toLowerCase() : '';
-    const cleanPhone = String(dto.phone).replace(/\D/g, '');
+    const rawPhone = dto.phone || (dto as any).mobileNumber || '';
+    
+    // Standardize & normalize phone number
+    const phoneData = normalizePhoneNumber(rawPhone, dto.countryCode || '+91');
+    if (!phoneData) {
+      throw new BadRequestException({ message: 'Invalid mobile number format. Please provide a valid 10-digit Indian mobile number.' });
+    }
+
+    const { countryCode, mobileNumber: cleanPhone, fullPhoneNumber } = phoneData;
 
     if (cleanEmail) {
       const existingEmail = await this.prisma.customer.findFirst({ where: { email: cleanEmail } });
@@ -147,10 +156,17 @@ export class CustomersService {
     }
 
     const existingPhone = await this.prisma.customer.findFirst({
-      where: { OR: [{ phone: cleanPhone }, { mobileNumber: cleanPhone }] },
+      where: { OR: [{ phone: cleanPhone }, { mobileNumber: cleanPhone }, { fullPhoneNumber }] },
     });
     if (existingPhone) {
       throw new BadRequestException({ message: 'An account with this mobile number already exists.' });
+    }
+
+    const existingUserPhone = await this.prisma.user.findFirst({
+      where: { OR: [{ username: cleanPhone }, { username: fullPhoneNumber }, { mobileNumber: cleanPhone }, { fullPhoneNumber }] },
+    });
+    if (existingUserPhone) {
+      throw new BadRequestException({ message: 'A user account with this mobile number already exists.' });
     }
 
     // Enforce canonical customer type and reject unsupported types
@@ -158,44 +174,79 @@ export class CustomersService {
       throw new BadRequestException({ message: 'Invalid customer type. Only Customer is allowed.' });
     }
 
-    // Atomic server-generated canonical sequential Customer ID (cannot be overridden by client)
-    const seq = await this.prisma.getNextSequence('customer', 1);
-    const custId = `CLIICKG-C-${String(seq).padStart(6, '0')}`;
-    const newId = generateObjectId();
-    const customerType = 'Customer';
+    const address1Val = dto.address1 || dto.address || '';
 
-    const created = await this.prisma.customer.create({
-      data: {
-        id: newId,
-        customerId: custId,
-        type: customerType,
-        name: dto.name,
-        email: cleanEmail,
-        phone: cleanPhone,
-        mobileNumber: cleanPhone,
-        countryCode: dto.countryCode || '+91',
-        gender: dto.gender || 'Male',
-        dob: dto.dob ? String(dto.dob) : '',
-        address1: dto.address1 || '',
-        address2: dto.address2 || '',
-        area: dto.area || '',
-        landmark: dto.landmark || '',
-        city: dto.city || '',
-        state: dto.state || 'TAMIL NADU',
-        pincode: dto.pincode || '',
-        status: dto.status || 'Active',
-      },
+    // Atomic transaction: Create linked User, Customer, and Cart together
+    const createdCustomer = await this.prisma.$transaction(async (tx) => {
+      const userId = generateObjectId();
+      const createdUser = await tx.user.create({
+        data: {
+          id: userId,
+          username: fullPhoneNumber, // Same canonical E.164 username format as Client registration
+          mobileNumber: cleanPhone,   // 10-digit national number
+          fullPhoneNumber: fullPhoneNumber, // +919876543210
+          countryCode: countryCode,
+          name: dto.name,
+          email: cleanEmail || null,
+          role: 'customer',
+          accountStatus: dto.accountStatus || (dto.status === 'Disabled' ? 'DISABLED' : 'ACTIVE'),
+        },
+      });
+
+      const seq = await this.prisma.getNextSequence('customer', 1);
+      const custId = `CLIICKG-C-${String(seq).padStart(6, '0')}`;
+      const newCustomerPk = generateObjectId();
+
+      const formattedAddr = [address1Val, dto.address2, dto.area, dto.landmark ? `(Landmark: ${dto.landmark})` : '', dto.city, dto.state, dto.pincode ? `- ${dto.pincode}` : ''].filter(Boolean).join(', ');
+
+      const newCust = await tx.customer.create({
+        data: {
+          id: newCustomerPk,
+          customerId: custId,
+          userId: createdUser.id,
+          type: 'Customer',
+          name: dto.name,
+          email: cleanEmail,
+          phone: cleanPhone,
+          mobileNumber: cleanPhone,
+          fullPhoneNumber: fullPhoneNumber,
+          countryCode: countryCode,
+          gender: dto.gender || 'Male',
+          dob: dto.dob ? String(dto.dob) : '',
+          address: dto.address || formattedAddr,
+          address1: address1Val,
+          address2: dto.address2 || '',
+          area: dto.area || '',
+          landmark: dto.landmark || '',
+          city: dto.city || '',
+          state: dto.state || '',
+          pincode: dto.pincode || '',
+          status: dto.status || 'Active',
+          accountStatus: dto.accountStatus || (dto.status === 'Disabled' ? 'DISABLED' : 'ACTIVE'),
+        },
+      });
+
+      // Create linked Cart record (same as canonical Client registration)
+      const cartEntityId = generateObjectId();
+      await tx.cart.create({
+        data: {
+          id: cartEntityId,
+          userId: createdUser.id,
+        },
+      });
+
+      return newCust;
     });
 
     try { await this.redisService.delete('dashboard:stats'); } catch {}
-    return created;
+    return createdCustomer;
   }
 
-  async update(id: string, dto: UpdateCustomerDto) {
+  async update(id: string, dto: UpdateCustomerDto, isAdmin = false) {
     const existing = await this.getById(id);
 
     const cleanEmail = dto.email !== undefined ? String(dto.email).trim().toLowerCase() : existing.email;
-    const cleanPhone = dto.phone ? String(dto.phone).replace(/\D/g, '') : existing.phone;
+    const cleanPhone = !isAdmin && dto.phone ? String(dto.phone).replace(/\D/g, '') : existing.phone;
 
     if (dto.email && cleanEmail && cleanEmail !== existing.email) {
       const dupEmail = await this.prisma.customer.findFirst({
@@ -204,7 +255,7 @@ export class CustomersService {
       if (dupEmail) throw new BadRequestException({ message: 'Email address is already in use by another account.' });
     }
 
-    if (dto.phone && cleanPhone !== existing.phone) {
+    if (!isAdmin && dto.phone && cleanPhone !== existing.phone) {
       const dupPhone = await this.prisma.customer.findFirst({
         where: { id: { not: existing.id }, OR: [{ phone: cleanPhone }, { mobileNumber: cleanPhone }] },
       });
@@ -225,22 +276,35 @@ export class CustomersService {
 
     const sanitizeText = (val?: string) => (val ? String(val).replace(/<[^>]*>?/gm, '').trim() : '');
 
+    const addr1 = dto.address1 !== undefined ? sanitizeText(dto.address1) : existing.address1;
+    const addr2 = dto.address2 !== undefined ? sanitizeText(dto.address2) : existing.address2;
+    const areaVal = dto.area !== undefined ? sanitizeText(dto.area) : existing.area;
+    const landmarkVal = dto.landmark !== undefined ? sanitizeText(dto.landmark) : existing.landmark;
+    const cityVal = dto.city !== undefined ? sanitizeText(dto.city) : existing.city;
+    const stateVal = dto.state !== undefined ? sanitizeText(dto.state) : existing.state;
+    const pincodeVal = dto.pincode !== undefined ? sanitizeText(dto.pincode) : existing.pincode;
+    const fallbackAddr = dto.address !== undefined ? sanitizeText(dto.address) : existing.address;
+
+    const formattedFullAddress = [addr1 || fallbackAddr, addr2, areaVal, landmarkVal ? `(Landmark: ${landmarkVal})` : '', cityVal, stateVal, pincodeVal ? `- ${pincodeVal}` : ''].filter(Boolean).join(', ');
+
     const updated = await this.prisma.customer.update({
       where: { id: existing.id },
       data: {
         ...(dto.name && { name: sanitizeText(dto.name) }),
         ...(dto.email !== undefined && { email: cleanEmail }),
-        ...(dto.phone && { phone: cleanPhone, mobileNumber: cleanPhone }),
+        ...(!isAdmin && dto.phone && { phone: cleanPhone, mobileNumber: cleanPhone }),
         ...(dto.gender && { gender: dto.gender }),
         ...(dto.dob !== undefined && { dob: dto.dob ? String(dto.dob).trim() : '' }),
-        ...(dto.address1 !== undefined && { address1: sanitizeText(dto.address1) }),
-        ...(dto.address2 !== undefined && { address2: sanitizeText(dto.address2) }),
-        ...(dto.area !== undefined && { area: sanitizeText(dto.area) }),
-        ...(dto.landmark !== undefined && { landmark: sanitizeText(dto.landmark) }),
-        ...(dto.city !== undefined && { city: sanitizeText(dto.city) }),
-        ...(dto.state !== undefined && { state: sanitizeText(dto.state) }),
-        ...(dto.pincode !== undefined && { pincode: sanitizeText(dto.pincode) }),
+        address: formattedFullAddress,
+        ...(dto.address1 !== undefined && { address1: addr1 }),
+        ...(dto.address2 !== undefined && { address2: addr2 }),
+        ...(dto.area !== undefined && { area: areaVal }),
+        ...(dto.landmark !== undefined && { landmark: landmarkVal }),
+        ...(dto.city !== undefined && { city: cityVal }),
+        ...(dto.state !== undefined && { state: stateVal }),
+        ...(dto.pincode !== undefined && { pincode: pincodeVal }),
         ...(dto.status && { status: dto.status }),
+        ...(dto.accountStatus && { accountStatus: dto.accountStatus }),
       },
     });
 
@@ -251,7 +315,9 @@ export class CustomersService {
         data: {
           ...(dto.name && { name: dto.name }),
           ...(dto.email !== undefined && { email: cleanEmail ? cleanEmail : null }),
-          ...(dto.phone && { mobileNumber: cleanPhone }),
+          ...(!isAdmin && dto.phone && { mobileNumber: cleanPhone }),
+          ...(dto.accountStatus && { accountStatus: dto.accountStatus }),
+          ...(dto.status && { accountStatus: dto.status === 'Disabled' ? 'DISABLED' : 'ACTIVE' }),
         },
       });
     }

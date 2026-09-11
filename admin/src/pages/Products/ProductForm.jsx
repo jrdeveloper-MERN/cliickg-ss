@@ -930,14 +930,7 @@ const ProductForm = () => {
                       value: String(attrObject[key] || ''),
                     }));
 
-                    // If no attributes on variant yet, pre-fill with category mapped attributes if present
-                    if (rows.length === 0 && effectiveAttrs.length > 0) {
-                      effectiveAttrs.forEach(a => {
-                        rows.push({ caption: a.caption, value: '' });
-                      });
-                    }
-
-                    // Always ensure at least 1 row exists
+                    // Always ensure at least 1 row exists by default per variant (no auto-duplicating multiple rows)
                     if (rows.length === 0) {
                       rows.push({ caption: '', value: '' });
                     }
@@ -1049,19 +1042,6 @@ const ProductForm = () => {
                               </div>
 
                               {/* Remove Row Button */}
-                              <div className="flex items-end self-end pb-0.5">
-                                <button
-                                  type="button"
-                                  className="bg-transparent border-none text-rose-500 hover:text-rose-700 cursor-pointer p-1.5 rounded transition-colors"
-                                  onClick={() => {
-                                    const newRows = rows.filter((_, i) => i !== rIdx);
-                                    updateVariantAttributes(newRows);
-                                  }}
-                                  title="Remove attribute specification"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </div>
                             </div>
                           );
                         })}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search, Heart, ShoppingCart, User, Menu, X, ChevronDown, ChevronRight, ArrowRight, Home, Grid, Tag, Package, PhoneCall, LogOut } from 'lucide-react';
@@ -14,10 +14,47 @@ import getImageUrl from '../../../utils/image.utils';
 import { computeCmsTargetUrl } from '../../../utils/cms.utils';
 import { MainCategory, Category, SubCategory } from '../../../types/categories/category.types';
 
+const HeaderSearchForm: React.FC<{
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  setShowSearchInput: (show: boolean) => void;
+  router: ReturnType<typeof useRouter>;
+}> = ({ searchQuery, setSearchQuery, setShowSearchInput, router }) => {
+  const searchParams = useSearchParams();
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    if (query) {
+      const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
+      params.set('q', query);
+      router.push(`/shop?${params.toString()}`);
+      setShowSearchInput(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSearchSubmit}
+      className="absolute right-0 top-10 bg-white shadow-[0_8px_25px_rgba(0,0,0,0.15)] rounded-full py-2 px-4 flex items-center w-[min(280px,calc(100vw-40px))] border border-primary z-[100]"
+    >
+      <Search size={16} className="text-primary mr-1.5 shrink-0" />
+      <input
+        type="text"
+        placeholder="Search products..."
+        aria-label="Search products input"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="border-none outline-none text-sm w-full text-slate-800 bg-transparent"
+        autoFocus
+      />
+    </form>
+  );
+};
+
 export const Header: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchInput, setShowSearchInput] = useState(false);
@@ -160,17 +197,6 @@ export const Header: React.FC = () => {
     };
   }, [mobileMenuOpen]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = searchQuery.trim();
-    if (query) {
-      const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
-      params.set('q', query);
-      router.push(`/shop?${params.toString()}`);
-      setShowSearchInput(false);
-    }
-  };
-
   const handleShopClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setMegaMenuOpen((prev) => !prev);
@@ -284,21 +310,29 @@ export const Header: React.FC = () => {
             </button>
 
             {showSearchInput && (
-              <form
-                onSubmit={handleSearchSubmit}
-                className="absolute right-0 top-10 bg-white shadow-[0_8px_25px_rgba(0,0,0,0.15)] rounded-full py-2 px-4 flex items-center w-[min(280px,calc(100vw-40px))] border border-primary z-[100]"
+              <Suspense
+                fallback={
+                  <form className="absolute right-0 top-10 bg-white shadow-[0_8px_25px_rgba(0,0,0,0.15)] rounded-full py-2 px-4 flex items-center w-[min(280px,calc(100vw-40px))] border border-primary z-[100]">
+                    <Search size={16} className="text-primary mr-1.5 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search products..."
+                      aria-label="Search products input"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="border-none outline-none text-sm w-full text-slate-800 bg-transparent"
+                      autoFocus
+                    />
+                  </form>
+                }
               >
-                <Search size={16} className="text-primary mr-1.5 shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  aria-label="Search products input"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="border-none outline-none text-sm w-full text-slate-800 bg-transparent"
-                  autoFocus
+                <HeaderSearchForm
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  setShowSearchInput={setShowSearchInput}
+                  router={router}
                 />
-              </form>
+              </Suspense>
             )}
           </div>
 

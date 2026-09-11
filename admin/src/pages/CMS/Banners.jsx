@@ -3,7 +3,7 @@ import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Common/Modal';
 import Pagination from '../../components/Common/Pagination';
-import { Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { validateImageFile, IMAGE_SPECS } from '../../utils/validation';
 
 const Banners = () => {
@@ -12,6 +12,7 @@ const Banners = () => {
   const [page, setPage] = useState(1);
   const limit = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const [linkType, setLinkType] = useState('');
   const [linkId, setLinkId] = useState('');
@@ -70,10 +71,33 @@ const Banners = () => {
     }
   };
 
+  const handleOpenAddModal = () => {
+    setEditingId(null);
+    setLinkType('');
+    setLinkId('');
+    setStatus('Active');
+    setImageFile(null);
+    setPreview('');
+    setErrors({});
+    setIsModalOpen(true);
+  };
+
+  const handleEditClick = (banner) => {
+    const targetId = banner.id || banner._id;
+    setEditingId(targetId);
+    setLinkType(banner.linkType || '');
+    setLinkId(banner.linkId || '');
+    setStatus(banner.status || 'Active');
+    setImageFile(null);
+    setPreview(banner.image || '');
+    setErrors({});
+    setIsModalOpen(true);
+  };
+
   const handleToggleStatus = async (id) => {
     try {
       const res = await api.patch(`/cms/banners/${id}/status`);
-      setBanners(banners.map(b => b._id === id ? res.data : b));
+      setBanners(banners.map(b => (b.id === id || b._id === id) ? res.data : b));
       showToast('Banner status updated');
     } catch (err) {
       showToast('Failed to update banner status', 'error');
@@ -84,7 +108,7 @@ const Banners = () => {
     if (!window.confirm('Delete this banner?')) return;
     try {
       await api.delete(`/cms/banners/${id}`);
-      setBanners(banners.filter(b => b._id !== id));
+      setBanners(banners.filter(b => (b.id !== id && b._id !== id)));
       showToast('Banner deleted successfully');
     } catch (err) {
       showToast('Failed to delete banner', 'error');
@@ -109,7 +133,7 @@ const Banners = () => {
       setErrors(prev => ({ ...prev, image: validation.error }));
       showToast(validation.error, 'error');
       setImageFile(null);
-      setPreview('');
+      setPreview(editingId ? (banners.find(b => (b.id === editingId || b._id === editingId))?.image || '') : '');
       e.target.value = '';
       return;
     }
@@ -123,7 +147,7 @@ const Banners = () => {
     e.preventDefault();
     const newErrors = {};
 
-    if (!imageFile) {
+    if (!editingId && !imageFile) {
       newErrors.image = 'Banner image is required (PNG/JPG/JPEG, 2400×800 px, Max 500 KB).';
     }
 
@@ -145,25 +169,36 @@ const Banners = () => {
     const calculatedUrl = computeLinkUrl(linkType, linkId);
 
     const formData = new FormData();
-    formData.append('image', imageFile);
+    if (imageFile) {
+      formData.append('image', imageFile);
+    }
     formData.append('linkType', linkType);
     formData.append('linkId', linkId);
     formData.append('linkUrl', calculatedUrl);
     formData.append('status', status);
 
     try {
-      const res = await api.post('/cms/banners', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setBanners([res.data, ...banners]);
-      showToast('Banner uploaded & linked successfully!');
+      if (editingId) {
+        const res = await api.put(`/cms/banners/${editingId}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setBanners(banners.map(b => ((b.id === editingId || b._id === editingId) ? res.data : b)));
+        showToast('Banner updated successfully!');
+      } else {
+        const res = await api.post('/cms/banners', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setBanners([res.data, ...banners]);
+        showToast('Banner uploaded & linked successfully!');
+      }
       setIsModalOpen(false);
       setImageFile(null);
       setPreview('');
       setLinkId('');
+      setEditingId(null);
       setErrors({});
     } catch (err) {
-      showToast(err.response?.data?.message || 'Error uploading banner', 'error');
+      showToast(err.response?.data?.message || 'Error saving banner', 'error');
     }
   };
 
@@ -180,7 +215,7 @@ const Banners = () => {
           <h1 className="heading-1">Banner Management</h1>
           <p className="subheading mt-0.5">Upload &amp; link promotional banners for storefront sections</p>
         </div>
-        <button type="button" className="btn-primary" onClick={() => { setIsModalOpen(true); setErrors({}); }}>
+        <button type="button" className="btn-primary" onClick={handleOpenAddModal}>
           <Plus size={16} /> Add Banner
         </button>
       </div>
@@ -203,7 +238,7 @@ const Banners = () => {
                 <tr><td colSpan="5" className="text-center text-admin-text-muted p-6">No banners uploaded yet</td></tr>
               ) : (
                 banners.slice((page - 1) * limit, page * limit).map((b, bIdx) => (
-                  <tr key={b._id || b.id || `ban-${bIdx}`}>
+                  <tr key={b.id || b._id || `ban-${bIdx}`}>
                     <td>
                       <div className="flex items-center gap-3">
                         <img src={b.image} alt="Banner" className="h-12 w-21 rounded-md object-cover border border-admin-border" />
@@ -221,15 +256,20 @@ const Banners = () => {
                         <input
                           type="checkbox"
                           checked={b.status === 'Active'}
-                          onChange={() => handleToggleStatus(b._id || b.id)}
+                          onChange={() => handleToggleStatus(b.id || b._id)}
                         />
                         <span className="slider"></span>
                       </label>
                     </td>
                     <td className="text-center">
-                      <button type="button" className="btn-danger p-1.5" onClick={() => handleDelete(b._id || b.id)}>
-                        <Trash2 size={15} />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button type="button" className="btn-secondary p-1.5" title="Edit Banner" onClick={() => handleEditClick(b)}>
+                          <Edit2 size={15} />
+                        </button>
+                        <button type="button" className="btn-danger p-1.5" title="Delete Banner" onClick={() => handleDelete(b.id || b._id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -247,12 +287,14 @@ const Banners = () => {
         />
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setErrors({}); }} title="Add Banner">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingId(null); setErrors({}); }} title={editingId ? 'Edit Banner' : 'Add Banner'}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
           {/* Banner Image Upload */}
           <div>
-            <label className="form-label">Upload Banner Image * (2400 × 800 px, Max 500 KB, PNG/JPG/JPEG)</label>
+            <label className="form-label">
+              {editingId ? 'Banner Image (Leave blank to keep existing image)' : 'Upload Banner Image * (2400 × 800 px, Max 500 KB, PNG/JPG/JPEG)'}
+            </label>
             <input
               type="file"
               accept=".png,.jpg,.jpeg,image/png,image/jpeg"
@@ -362,8 +404,8 @@ const Banners = () => {
           </div>
 
           <div className="flex justify-end gap-3 mt-4">
-            <button type="button" className="btn-secondary text-xs" onClick={() => { setIsModalOpen(false); showToast('Banner creation cancelled', 'warn'); }}>Cancel</button>
-            <button type="submit" className="btn-primary text-xs">Upload &amp; Link Banner</button>
+            <button type="button" className="btn-secondary text-xs" onClick={() => { setIsModalOpen(false); setEditingId(null); setErrors({}); }}>Cancel</button>
+            <button type="submit" className="btn-primary text-xs">{editingId ? 'Update Banner' : 'Upload & Link Banner'}</button>
           </div>
         </form>
       </Modal>

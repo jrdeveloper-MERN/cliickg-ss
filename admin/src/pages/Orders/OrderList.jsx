@@ -6,7 +6,7 @@ import OrderDetailDrawer from '../../components/Orders/OrderDetailDrawer';
 import Modal from '../../components/Common/Modal';
 import {
   Search, Download, Filter, Eye, RefreshCw, Package,
-  Trash2, Save, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown
+  Trash2, Save, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown
 } from 'lucide-react';
 
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -19,6 +19,98 @@ const ORDER_STATUS_OPTIONS = [
 const PAYMENT_STATUS_OPTIONS = [
   'Pending', 'Initiated', 'Processing', 'Success', 'Failed', 'Cancelled', 'Refunded'
 ];
+
+const MultiSelectDropdown = ({ label, placeholder, options, selectedValues = [], onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option) => {
+    let next;
+    if (selectedValues.includes(option)) {
+      next = selectedValues.filter((item) => item !== option);
+    } else {
+      next = [...selectedValues, option];
+    }
+    onChange(next);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedValues.length === options.length) {
+      onChange([]);
+    } else {
+      onChange([...options]);
+    }
+  };
+
+  const getDisplayText = () => {
+    if (!selectedValues || selectedValues.length === 0) {
+      return placeholder;
+    }
+    if (selectedValues.length === 1) {
+      return selectedValues[0];
+    }
+    return `${selectedValues.length} Selected (${selectedValues.join(', ')})`;
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">
+        {label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="form-control text-xs h-9 flex items-center justify-between w-full px-2.5 bg-admin-card text-admin-text-primary border border-admin-border rounded text-left truncate cursor-pointer hover:border-admin-accent transition-colors"
+      >
+        <span className="truncate pr-2">{getDisplayText()}</span>
+        <ChevronDown size={14} className={`shrink-0 text-admin-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-admin-card border border-admin-border rounded-md shadow-lg p-2 flex flex-col gap-1 max-h-60 overflow-y-auto">
+          <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-admin-border px-1">
+            <span className="text-[10px] font-bold uppercase text-admin-text-muted">Multi-Select</span>
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="text-[10px] font-bold text-admin-accent hover:underline bg-transparent border-none cursor-pointer"
+            >
+              {selectedValues.length === options.length ? 'Clear All' : 'Select All'}
+            </button>
+          </div>
+          {options.map((option) => {
+            const isChecked = selectedValues.includes(option);
+            return (
+              <label
+                key={option}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-2 px-2 py-1.5 text-xs text-admin-text-primary hover:bg-admin-subtle rounded cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleOption(option)}
+                  className="rounded border-admin-border text-admin-accent focus:ring-admin-accent accent-emerald-600 cursor-pointer"
+                />
+                <span className={isChecked ? 'font-semibold text-admin-text-primary' : ''}>{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const OrderList = () => {
   const [searchParams] = useSearchParams();
@@ -52,20 +144,26 @@ const OrderList = () => {
     return searchParams.get('toDate') || '';
   });
   const [orderStatus, setOrderStatus] = useState(() => {
-    return searchParams.get('status') || searchParams.get('orderStatus') || '';
+    const raw = searchParams.get('status') || searchParams.get('orderStatus') || '';
+    if (!raw) return [];
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
   });
   const [paymentStatus, setPaymentStatus] = useState(() => {
-    return searchParams.get('paymentStatus') || '';
+    const raw = searchParams.get('paymentStatus') || '';
+    if (!raw) return [];
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
   });
 
   useEffect(() => {
     const urlStatus = searchParams.get('status') || searchParams.get('orderStatus');
-    if (urlStatus !== null && urlStatus !== orderStatus) {
-      setOrderStatus(urlStatus);
+    if (urlStatus !== null) {
+      const parsed = urlStatus ? urlStatus.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      setOrderStatus(parsed);
     }
     const urlPaymentStatus = searchParams.get('paymentStatus');
-    if (urlPaymentStatus !== null && urlPaymentStatus !== paymentStatus) {
-      setPaymentStatus(urlPaymentStatus);
+    if (urlPaymentStatus !== null) {
+      const parsedP = urlPaymentStatus ? urlPaymentStatus.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      setPaymentStatus(parsedP);
     }
     if (searchParams.get('date') === 'today' || searchParams.get('filter') === 'today') {
       const todayStr = getTodayStr();
@@ -111,15 +209,38 @@ const OrderList = () => {
     fetchOrders();
   }, [page, sortBy, orderStatus, paymentStatus, paymentMethod, gatewayFilter, orderTypeFilter, courierFilter, fromDate, toDate]);
 
+  const handleFromDateChange = (val) => {
+    if (toDate && val && val > toDate) {
+      showToast('From Date cannot be greater than To Date.', 'error');
+      return;
+    }
+    setFromDate(val);
+  };
+
+  const handleToDateChange = (val) => {
+    if (fromDate && val && val < fromDate) {
+      showToast('From Date cannot be greater than To Date.', 'error');
+      return;
+    }
+    setToDate(val);
+  };
+
   const fetchOrders = async (resetPage = false, overrideFilters = null) => {
     try {
+      const fFromDate = overrideFilters ? overrideFilters.fromDate : fromDate;
+      const fToDate = overrideFilters ? overrideFilters.toDate : toDate;
+
+      if (fFromDate && fToDate && fFromDate > fToDate) {
+        showToast('From Date cannot be greater than To Date.', 'error');
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const p = resetPage ? 1 : page;
       if (resetPage && page !== 1) setPage(1);
 
       const params = { page: p, limit, sortBy: overrideFilters?.sortBy || sortBy };
-      const fFromDate = overrideFilters ? overrideFilters.fromDate : fromDate;
-      const fToDate = overrideFilters ? overrideFilters.toDate : toDate;
       const fOrderStatus = overrideFilters ? overrideFilters.orderStatus : orderStatus;
       const fPaymentStatus = overrideFilters ? overrideFilters.paymentStatus : paymentStatus;
       const fPaymentMethod = overrideFilters ? overrideFilters.paymentMethod : paymentMethod;
@@ -130,8 +251,19 @@ const OrderList = () => {
 
       if (fFromDate) params.fromDate = fFromDate;
       if (fToDate) params.toDate = fToDate;
-      if (fOrderStatus) params.orderStatus = fOrderStatus;
-      if (fPaymentStatus) params.paymentStatus = fPaymentStatus;
+
+      if (Array.isArray(fOrderStatus) && fOrderStatus.length > 0) {
+        params.orderStatus = fOrderStatus.join(',');
+      } else if (typeof fOrderStatus === 'string' && fOrderStatus) {
+        params.orderStatus = fOrderStatus;
+      }
+
+      if (Array.isArray(fPaymentStatus) && fPaymentStatus.length > 0) {
+        params.paymentStatus = fPaymentStatus.join(',');
+      } else if (typeof fPaymentStatus === 'string' && fPaymentStatus) {
+        params.paymentStatus = fPaymentStatus;
+      }
+
       if (fPaymentMethod) params.paymentMethod = fPaymentMethod;
       if (fGateway) params.gateway = fGateway;
       if (fOrderType) params.orderType = fOrderType;
@@ -161,8 +293,8 @@ const OrderList = () => {
     setSearch('');
     setFromDate('');
     setToDate('');
-    setOrderStatus('');
-    setPaymentStatus('');
+    setOrderStatus([]);
+    setPaymentStatus([]);
     setPaymentMethod('');
     setGatewayFilter('');
     setOrderTypeFilter('');
@@ -173,8 +305,8 @@ const OrderList = () => {
     fetchOrders(true, {
       fromDate: '',
       toDate: '',
-      orderStatus: '',
-      paymentStatus: '',
+      orderStatus: [],
+      paymentStatus: [],
       paymentMethod: '',
       gatewayFilter: '',
       orderTypeFilter: '',
@@ -366,29 +498,41 @@ const OrderList = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-3 border-t border-admin-border">
           <div>
             <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">From Date</label>
-            <input type="date" className="form-control text-xs h-9" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <input
+              type="date"
+              className="form-control text-xs h-9"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => handleFromDateChange(e.target.value)}
+            />
           </div>
 
           <div>
             <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">To Date</label>
-            <input type="date" className="form-control text-xs h-9" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <input
+              type="date"
+              className="form-control text-xs h-9"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => handleToDateChange(e.target.value)}
+            />
           </div>
 
-          <div>
-            <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">Payment Status</label>
-            <select className="form-control text-xs h-9" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option value="">All Payment Statuses</option>
-              {PAYMENT_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Payment Status"
+            placeholder="All Payment Statuses"
+            options={PAYMENT_STATUS_OPTIONS}
+            selectedValues={Array.isArray(paymentStatus) ? paymentStatus : (paymentStatus ? [paymentStatus] : [])}
+            onChange={(vals) => setPaymentStatus(vals)}
+          />
 
-          <div>
-            <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">Order Status</label>
-            <select className="form-control text-xs h-9" value={orderStatus} onChange={(e) => setOrderStatus(e.target.value)}>
-              <option value="">All Order Statuses</option>
-              {ORDER_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Order Status"
+            placeholder="All Order Statuses"
+            options={ORDER_STATUS_OPTIONS}
+            selectedValues={Array.isArray(orderStatus) ? orderStatus : (orderStatus ? [orderStatus] : [])}
+            onChange={(vals) => setOrderStatus(vals)}
+          />
 
           <div>
             <label className="form-label text-[11px] font-bold text-admin-text-muted mb-1 block">Payment Method</label>

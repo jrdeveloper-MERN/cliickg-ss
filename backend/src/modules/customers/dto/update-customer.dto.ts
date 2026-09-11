@@ -54,6 +54,10 @@ export class UpdateCustomerDto {
 
   @IsOptional()
   @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
   status?: string;
 
   @IsOptional()

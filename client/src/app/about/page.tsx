@@ -4,8 +4,8 @@ import PolicyPageView from '../../components/policy/PolicyPageView';
 
 export const metadata: Metadata = {
   title: 'About Us | CLIICKG',
-  description: 'Learn about CLIICKG – our legacy of fine jewelry, authentic craftsmanship, transparent pricing, certified hallmarking, and customer commitment.',
-  keywords: ['about CLIICKG', 'CLIICKG story', 'fine jewelry brand', 'certified jewelry', 'gold and diamond jewelry'],
+  description: 'Learn about CLIICKG – your trusted B2C marketplace for construction materials, tools, hardware, building supplies, and multi-seller products.',
+  keywords: ['about CLIICKG', 'CLIICKG story', 'construction materials marketplace', 'building tools and hardware', 'CLIICKG B2C marketplace'],
   robots: { index: true, follow: true },
 };
 

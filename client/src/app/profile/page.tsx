@@ -175,7 +175,7 @@ export default function ProfilePage() {
     address1: '',
     address2: '',
     area: '',
-    state: 'Tamil Nadu',
+    state: '',
     landmark: '',
     city: '',
     pincode: '',
@@ -188,6 +188,7 @@ export default function ProfilePage() {
 
   const [userAddresses, setUserAddresses] = useState<Address[]>([]);
   const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
+  const [deletingAddrId, setDeletingAddrId] = useState<string | null>(null);
   const [editingAddress, setEditingAddress] = useState<Address>({
     id: '',
     name: '',
@@ -198,10 +199,23 @@ export default function ProfilePage() {
     area: '',
     landmark: '',
     city: '',
-    state: 'Tamil Nadu',
+    state: '',
     pincode: '',
     isDefault: false,
   });
+
+  const confirmDeleteSavedAddress = async () => {
+    if (!deletingAddrId) return;
+    try {
+      await addressService.deleteAddress(deletingAddrId);
+      setInfoMessage('Address deleted successfully!');
+      fetchUserAddresses();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Primary address cannot be deleted.');
+    } finally {
+      setDeletingAddrId(null);
+    }
+  };
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -224,7 +238,7 @@ export default function ProfilePage() {
   };
 
   const normalizeState = (st?: string) => {
-    if (!st || !st.trim()) return 'Tamil Nadu';
+    if (!st || !st.trim()) return '';
     const found = INDIAN_STATES.find((s) => s.toLowerCase() === st.trim().toLowerCase());
     return found || st.trim();
   };
@@ -395,7 +409,7 @@ export default function ProfilePage() {
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAddress.name || !editingAddress.phone || !editingAddress.addressLine1 || !editingAddress.city || !editingAddress.state || !editingAddress.pincode) {
-      alert('Please fill out all required fields.');
+      setErrorMessage('Please fill out all required fields.');
       return;
     }
 
@@ -427,7 +441,7 @@ export default function ProfilePage() {
       if (checkAuth) await checkAuth();
       setInfoMessage('Delivery address saved successfully!');
     } catch (err: any) {
-      alert(err.message || 'Failed to save address.');
+      setErrorMessage(err.message || 'Failed to save address.');
     }
   };
 
@@ -717,6 +731,7 @@ export default function ProfilePage() {
               </button>
             </div>
           </form>
+
         </div>
       )}
 
@@ -882,195 +897,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Add / Edit Delivery Address Lightbox Modal */}
-      {isAddrModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-6 animate-drawer-fade"
-          onClick={() => setIsAddrModalOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-[600px] w-full max-h-[90vh] overflow-y-auto shadow-2xl p-8 relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-4">
-              <h3 className="text-lg font-bold text-slate-800 m-0">
-                {editingAddress.id ? 'Edit Delivery Address' : 'Add New Delivery Address'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddrModalOpen(false)}
-                className="bg-slate-100 hover:bg-slate-200 border-none text-slate-500 cursor-pointer p-1.5 rounded-full flex items-center justify-center transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAddress} className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  Full Name <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editingAddress.name || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Recipient Name"
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  Mobile Number <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="tel"
-                  value={editingAddress.phone || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                  placeholder="10-digit mobile number"
-                  maxLength={10}
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Email Address</label>
-                <input
-                  type="email"
-                  value={editingAddress.email || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="Email address"
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  Address Line 1 <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editingAddress.addressLine1 || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, addressLine1: e.target.value }))}
-                  placeholder="House No, Building, Street"
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Address Line 2</label>
-                <input
-                  type="text"
-                  value={editingAddress.addressLine2 || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, addressLine2: e.target.value }))}
-                  placeholder="Apartment, Suite, Unit"
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Area / Locality</label>
-                <input
-                  type="text"
-                  value={editingAddress.area || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, area: e.target.value }))}
-                  placeholder="Area / Locality"
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Landmark (Optional)</label>
-                <input
-                  type="text"
-                  value={editingAddress.landmark || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, landmark: e.target.value }))}
-                  placeholder="Nearby Landmark"
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  City <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editingAddress.city || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, city: e.target.value }))}
-                  placeholder="City"
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  State <span className="text-rose-600">*</span>
-                </label>
-                <select
-                  value={editingAddress.state || 'Tamil Nadu'}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, state: e.target.value }))}
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                >
-                  {INDIAN_STATES.map((st) => (
-                    <option key={st} value={st}>
-                      {st.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                  Pincode <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editingAddress.pincode || ''}
-                  onChange={(e) => setEditingAddress((prev) => ({ ...prev, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
-                  placeholder="6-digit Pincode"
-                  maxLength={6}
-                  required
-                  className="w-full py-2.5 px-3.5 rounded-lg border border-slate-300 focus:border-primary text-xs outline-none text-slate-800 bg-white"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editingAddress.isDefault || false}
-                    onChange={(e) => setEditingAddress((prev) => ({ ...prev, isDefault: e.target.checked }))}
-                    className="accent-primary"
-                  />
-                  Set as primary delivery address
-                </label>
-              </div>
-
-              <div className="sm:col-span-2 flex justify-end gap-3 mt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAddrModalOpen(false)}
-                  className="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 py-2.5 px-6 rounded-lg font-bold text-xs cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-primary hover:bg-primary-hover text-white border-none py-2.5 px-7 rounded-lg font-bold text-xs cursor-pointer transition-colors"
-                >
-                  Save Address
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {selectedBreakupItem && selectedOrder && (
         <PriceBreakupModal item={selectedBreakupItem} order={selectedOrder} onClose={() => setSelectedBreakupItem(null)} />

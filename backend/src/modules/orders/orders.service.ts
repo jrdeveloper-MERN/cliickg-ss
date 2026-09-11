@@ -100,13 +100,39 @@ export class OrdersService {
     }
 
     if (orderStatus) {
-      where.orderStatus = { equals: orderStatus, mode: 'insensitive' };
+      const statuses = Array.isArray(orderStatus)
+        ? orderStatus
+        : typeof orderStatus === 'string' && orderStatus.includes(',')
+        ? orderStatus.split(',').map((s) => s.trim()).filter(Boolean)
+        : [orderStatus];
+
+      if (statuses.length > 1) {
+        where.orderStatus = { in: statuses };
+      } else if (statuses.length === 1) {
+        where.orderStatus = { equals: statuses[0], mode: 'insensitive' };
+      }
     }
     if (paymentStatus) {
-      if (paymentStatus.toLowerCase() === 'success' || paymentStatus.toLowerCase() === 'paid') {
-        where.paymentStatus = { in: ['Success', 'Paid', 'PAID', 'success', 'paid'] };
-      } else {
-        where.paymentStatus = { equals: paymentStatus, mode: 'insensitive' };
+      const pStatuses = Array.isArray(paymentStatus)
+        ? paymentStatus
+        : typeof paymentStatus === 'string' && paymentStatus.includes(',')
+        ? paymentStatus.split(',').map((s) => s.trim()).filter(Boolean)
+        : [paymentStatus];
+
+      const expandedPStatuses: string[] = [];
+      pStatuses.forEach((ps) => {
+        const lower = ps.toLowerCase();
+        if (lower === 'success' || lower === 'paid') {
+          expandedPStatuses.push('Success', 'Paid', 'PAID', 'success', 'paid');
+        } else {
+          expandedPStatuses.push(ps);
+        }
+      });
+
+      if (expandedPStatuses.length > 1) {
+        where.paymentStatus = { in: expandedPStatuses };
+      } else if (expandedPStatuses.length === 1) {
+        where.paymentStatus = { equals: expandedPStatuses[0], mode: 'insensitive' };
       }
     }
     if (paymentMethod) {
@@ -148,6 +174,13 @@ export class OrdersService {
     }
 
     if (fromDate || toDate) {
+      if (fromDate && toDate) {
+        const pFrom = new Date(fromDate);
+        const pTo = new Date(toDate);
+        if (!isNaN(pFrom.getTime()) && !isNaN(pTo.getTime()) && pFrom > pTo) {
+          throw new BadRequestException('From Date cannot be greater than To Date.');
+        }
+      }
       const createdAtFilter: any = {};
       if (fromDate) {
         const parsedFrom = new Date(fromDate);

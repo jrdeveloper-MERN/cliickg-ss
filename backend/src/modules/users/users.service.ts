@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, BadRequestException } from '@nestjs/c
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { generateObjectId } from '../../common/utils/object-id.util';
+import { normalizePhoneNumber } from '../../common/utils/phone.util';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -36,11 +37,18 @@ export class UsersService implements OnModuleInit {
   }
 
   async findByFullPhoneNumber(fullPhoneNumber: string) {
+    const normalized = normalizePhoneNumber(fullPhoneNumber);
+    const full = normalized ? normalized.fullPhoneNumber : fullPhoneNumber;
+    const mobile = normalized ? normalized.mobileNumber : fullPhoneNumber.replace(/\D/g, '');
+
     return this.prisma.user.findFirst({
       where: {
         OR: [
+          { fullPhoneNumber: full },
+          { username: full },
+          { mobileNumber: mobile },
+          { username: mobile },
           { fullPhoneNumber },
-          { username: fullPhoneNumber },
         ],
       },
     });
